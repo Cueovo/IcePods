@@ -1,4 +1,5 @@
 import 'package:audio_service/audio_service.dart';
+import 'package:audio_session/audio_session.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -23,6 +24,8 @@ Future<void> main() async {
       artDownscaleHeight: 512,
     ),
   );
+  final audioSession = await AudioSession.instance;
+  await audioSession.configure(const AudioSessionConfiguration.music());
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(

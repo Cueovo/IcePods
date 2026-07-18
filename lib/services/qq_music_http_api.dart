@@ -468,7 +468,7 @@ class QqMusicHttpApi implements QqMusicApi {
     }
     final parsed = Uri.tryParse(purl);
     if (parsed != null && parsed.hasScheme) {
-      return parsed;
+      return _securePlaybackUri(parsed);
     }
     final dispatch = _data(await _get('/song/get_cdn_dispatch'));
     final cdn = _list(dispatch['sip'])
@@ -483,7 +483,7 @@ class QqMusicHttpApi implements QqMusicApi {
     if (cdn.isEmpty) {
       throw const QqMusicApiException('服务没有返回音乐 CDN 地址');
     }
-    return Uri.parse(cdn).resolve(purl);
+    return _securePlaybackUri(Uri.parse(cdn).resolve(purl));
   }
 
   @override
@@ -570,9 +570,17 @@ class QqMusicHttpApi implements QqMusicApi {
     }
     final parsed = Uri.tryParse(purl);
     if (parsed?.hasScheme == true) {
-      return parsed;
+      return _securePlaybackUri(parsed!);
     }
-    return cdn?.resolve(purl);
+    final resolved = cdn?.resolve(purl);
+    return resolved == null ? null : _securePlaybackUri(resolved);
+  }
+
+  Uri _securePlaybackUri(Uri uri) {
+    if (uri.scheme.toLowerCase() != 'http') {
+      return uri;
+    }
+    return uri.replace(scheme: 'https');
   }
 
   @override

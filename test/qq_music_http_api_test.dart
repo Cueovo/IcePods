@@ -583,6 +583,50 @@ void main() {
     },
   );
 
+  test('absolute HTTP playback URLs are upgraded to HTTPS', () async {
+    final store = MemoryQqMusicCredentialStore()..credential = credential;
+    final api = QqMusicHttpApi(
+      baseUri: Uri.parse('http://localhost:8899'),
+      credentialStore: store,
+      client: MockClient((request) async {
+        if (request.url.path == '/login/check_expired') {
+          return jsonResponse({'code': 0, 'msg': 'ok', 'data': null});
+        }
+        if (request.url.path == '/song/direct-mid/url') {
+          return jsonResponse({
+            'code': 0,
+            'msg': 'ok',
+            'data': {
+              'data': [
+                {
+                  'mid': 'direct-mid',
+                  'purl': 'http://cdn.example/direct.mp3?vkey=test',
+                  'result': 0,
+                },
+              ],
+            },
+          });
+        }
+        throw StateError('Unexpected request: ${request.url}');
+      }),
+    );
+    addTearDown(api.dispose);
+    await api.restoreSession();
+
+    final url = await api.getPlayableUrl(
+      const QqMusicItem(
+        id: 'direct',
+        mid: 'direct-mid',
+        title: 'Direct',
+        subtitle: '',
+        imageUrl: '',
+        type: QqMusicItemType.song,
+      ),
+    );
+
+    expect(url.toString(), 'https://cdn.example/direct.mp3?vkey=test');
+  });
+
   test('single playback URL rejects explicit authorization denial', () async {
     final store = MemoryQqMusicCredentialStore()..credential = credential;
     var dispatchRequested = false;
