@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Ambient iPod with Cover Flow</title>
+    <style>
+        :root {
+            --screen-bg: #000000;
+            --text-main: #ffffff;
+            --text-sub: rgba(255, 255, 255, 0.6);
+            --glass-bg: rgba(255, 255, 255, 0.15);
+            --glass-border: rgba(255, 255, 255, 0.2);
+            --glass-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+            --device-bg: linear-gradient(135deg, #fdfdfd 0%, #e8e8ed 100%);
+            --wheel-bg: linear-gradient(145deg, #e3e3e8, #d1d1d6);
+            --center-btn: linear-gradient(145deg, #ffffff, #f0f0f5);
+            --icon-color: #6e6e73;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        
+        body {
+            display: flex; justify-content: center; align-items: center; height: 100vh; 
+            background-color: #0f0f11; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Helvetica, Arial, sans-serif;
+            overscroll-behavior: none; perspective: 1000px;
+        }
+
+        /* 物理机身 */
+        .player-container {
+            width: 360px; height: 760px; background: var(--device-bg); border-radius: 44px;
+            box-shadow: 0 40px 80px rgba(0,0,0,0.5), inset 0 4px 8px rgba(255,255,255,0.9), inset 0 -4px 8px rgba(0,0,0,0.05), 0 0 0 1px #c1c1c6;
+            display: flex; flex-direction: column; overflow: hidden; position: relative;
+        }
+
+        /* ================= 屏幕全局结构 ================= */
+        .screen-section {
+            height: 55%; background: var(--screen-bg); border-bottom: 2px solid rgba(0,0,0,0.1);
+            position: relative; overflow: hidden; z-index: 2;
+        }
+
+        /* 顶部状态栏 - 永远置顶悬浮 */
+        .status-bar {
+            position: absolute; top: 0; left: 0; right: 0; height: 34px; padding: 0 25px;
+            display: flex; justify-content: space-between; align-items: center;
+            font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.85); z-index: 30; pointer-events: none;
+        }
+        .status-icons { display: flex; gap: 6px; align-items: center; }
+        .status-icons svg { width: 14px; height: 14px; fill: currentColor; }
+
+        /* 环境光晕层 */
+        .ambient-bg {
+            position: absolute; inset: -20%; background-size: cover; background-position: center;
+            filter: blur(60px) saturate(2.5); opacity: 0.65; transition: background-image 0.6s ease; z-index: 1;
+        }
+        .glass-overlay {
+            position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.7) 100%);
+            z-index: 2; pointer-events: none;
+        }
+
+        /* 视图推拉轨道：现在支持三屏滑动 (0%, -100%, -200%) */
+        .view-slider {
+            display: flex; width: 100%; height: 100%; position: relative; z-index: 5;
+            transition: transform 0.55s cubic-bezier(0.25, 1, 0.25, 1);
+        }
+        .view-panel { min-width: 100%; height: 100%; position: relative; }
+
+
+        /* ----- 视图 1：主页分屏菜单 ----- */
+        .split-view { display: flex; padding: 34px 20px 20px; gap: 15px; align-items: center; }
+        .left-menu { width: 42%; display: flex; flex-direction: column; gap: 10px; }
+        .menu-item {
+            padding: 14px 16px; border-radius: 16px; font-size: 15px; font-weight: 500; color: var(--text-sub);
+            transition: all 0.3s; display: flex; align-items: center; justify-content: space-between;
+        }
+        .menu-item.active {
+            background: var(--glass-bg); color: var(--text-main); font-weight: 700;
+            box-shadow: var(--glass-shadow); border: 1px solid var(--glass-border);
+            backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); transform: scale(1.05);
+        }
+        .menu-item .dot { width: 6px; height: 6px; background: #fff; border-radius: 50%; opacity: 0; transform: scale(0); transition: all 0.3s; }
+        .menu-item.active .dot { opacity: 1; transform: scale(1); }
+        .right-preview { width: 58%; display: flex; justify-content: center; }
+        .preview-card {
+            width: 100%; height: 280px; border-radius: 24px; background-size: cover; background-position: center;
+            box-shadow: 0 25px 50px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,255,255,0.2); position: relative; overflow: hidden; display: flex; align-items: flex-end; padding: 20px 16px;
+            opacity: 0; transform: scale(0.92) translateY(15px) rotateX(10deg); transition: all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+        .preview-card.show { opacity: 1; transform: scale(1) translateY(0) rotateX(0deg); }
+        .preview-card::after { content: ''; position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.3) 45%, transparent 100%); z-index: 1; pointer-events: none; }
+        .preview-info { position: relative; z-index: 2; transform: translateY(10px); opacity: 0; transition: all 0.4s 0.1s; }
+        .preview-card.show .preview-info { transform: translateY(0); opacity: 1; }
+        .preview-title { font-size: 18px; font-weight: 800; color: #fff; margin-bottom: 6px; line-height: 1.2; }
+        .preview-desc { font-size: 13px; font-weight: 500; color: rgba(255,255,255,0.75); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.4; }
+
+
+        /* ----- 视图 2：注入灵魂的 3D Cover Flow ----- */
+        .cover-flow-panel {
+            display: flex; flex-direction: column; align-items: center; justify-content: center; padding-top: 20px;
+        }
+        .cf-stage {
+            width: 100%; height: 220px; position: relative;
+            /* 构建极其关键的 3D 透视舞台 */
+            perspective: 800px; transform-style: preserve-3d;
+            display: flex; justify-content: center; align-items: center;
+        }
+        .cf-item {
+            position: absolute; width: 140px; height: 140px; border-radius: 12px;
+            background-size: cover; background-position: center;
+            /* 经典灵魂特效：镜像倒影 */
+            -webkit-box-reflect: below 4px linear-gradient(transparent 60%, rgba(255,255,255,0.4) 100%);
+            transition: transform 0.4s cubic-bezier(0.25, 1, 0.25, 1), opacity 0.4s, filter 0.4s;
+            box-shadow: 0 15px 30px rgba(0,0,0,0.6);
+        }
+        .cf-info {
+            text-align: center; margin-top: 40px; width: 80%;
+            opacity: 0; transform: translateY(10px); transition: all 0.3s ease;
+        }
+        .cf-info.show { opacity: 1; transform: translateY(0); }
+        .cf-title { font-size: 20px; font-weight: 800; color: #fff; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
+        .cf-artist { font-size: 14px; font-weight: 500; color: rgba(255,255,255,0.6); }
+
+
+        /* ----- 视图 3：沉浸式播放器 ----- */
+        .now-playing-panel { padding: 40px 25px 30px; display: flex; flex-direction: column; align-items: center; justify-content: space-between; }
+        .album-art-player { width: 220px; height: 220px; border-radius: 20px; background-size: cover; background-position: center; box-shadow: 0 20px 50px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,255,255,0.1); transition: transform 0.1s; }
+        .player-bottom-area { width: 100%; display: flex; flex-direction: column; }
+        .song-info { width: 100%; text-align: left; margin-bottom: 20px; }
+        .song-title { font-size: 24px; font-weight: 800; color: #fff; margin-bottom: 4px; }
+        .song-artist { font-size: 15px; font-weight: 500; color: var(--text-sub); }
+        .progress-container { width: 100%; margin-bottom: 15px; }
+        .progress-bar { width: 100%; height: 5px; background: rgba(255,255,255,0.2); border-radius: 3px; margin-bottom: 8px; overflow: hidden;}
+        .progress-fill { width: 30%; height: 100%; background: #fff; border-radius: 3px; }
+        .time-info { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.5); }
+        .secondary-controls { display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 0 10px; color: rgba(255,255,255,0.6); margin-top: 5px; }
+        .secondary-controls svg { width: 20px; height: 20px; fill: currentColor; }
+
+        /* ================= 经典底盘 ================= */
+        .wheel-section { height: 45%; display: flex; justify-content: center; align-items: center; position: relative; }
+        .click-wheel {
+            width: 280px; height: 280px; background: var(--wheel-bg); border-radius: 50%; position: relative;
+            box-shadow: inset 0 2px 4px rgba(255,255,255,0.8), inset 0 -2px 4px rgba(0,0,0,0.1), 0 15px 25px rgba(0,0,0,0.06); touch-action: none; user-select: none;
+        }
+        .center-button {
+            width: 100px; height: 100px; background: var(--center-btn); border-radius: 50%; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1), inset 0 2px 3px rgba(255,255,255,1), inset 0 -2px 3px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.03); cursor: pointer; z-index: 10; transition: all 0.1s ease;
+        }
+        .center-button:active { background: #e8e8ed; box-shadow: inset 0 3px 6px rgba(0,0,0,0.1), inset 0 -1px 2px rgba(255,255,255,0.5); }
+        .wheel-btn {
+            position: absolute; color: var(--icon-color); cursor: pointer; font-weight: 700; display: flex; align-items: center; justify-content: center; z-index: 5; text-shadow: 0 1px 1px rgba(255,255,255,0.9); font-size: 14px; width: 40px; height: 40px;
+        }
+        .wheel-btn svg { width: 16px; height: 16px; fill: currentColor; pointer-events: none; }
+        .wheel-btn.top { top: 15px; left: 50%; transform: translateX(-50%); width: 60px;}
+        .wheel-btn.bottom { bottom: 15px; left: 50%; transform: translateX(-50%); }
+        .wheel-btn.left { left: 15px; top: 50%; transform: translateY(-50%); }
+        .wheel-btn.right { right: 15px; top: 50%; transform: translateY(-50%); }
+        .wheel-btn:active { color: #1d1d1f; text-shadow: none; }
+    </style>
+</head>
+<body>
+
+    <div class="player-container">
+        <!-- 屏幕区域 -->
+        <div class="screen-section">
+            <div class="status-bar">
+                <span id="clock">01:24</span>
+                <div class="status-icons">
+                    <svg viewBox="0 0 24 24"><path d="M12,3C7.8,3,3.9,4.4,0.8,6.8l2.3,2.7C5.4,7.6,8.6,6.5,12,6.5s6.6,1.1,8.9,3.1l2.3-2.7C20.1,4.4,16.2,3,12,3z M12,9c-2.4,0-4.6,0.8-6.4,2.1l2.3,2.7C9.1,13.1,10.5,12.5,12,12.5s2.9,0.5,4.1,1.4l2.3-2.7C16.6,9.8,14.4,9,12,9z M12,15c-0.8,0-1.6,0.3-2.2,0.8l2.2,2.7l2.2-2.7C13.6,15.3,12.8,15,12,15z"></path></svg>
+                    <svg viewBox="0 0 24 24"><path d="M16,6H4C2.9,6,2,6.9,2,8v8c0,1.1,0.9,2,2,2h12c1.1,0,2-0.9,2-2V8C18,6.9,17.1,6,16,6z M16,16H4V8h12V16z M20,10h2v4h-2V10z M14,10H6v4h8V10z"></path></svg>
+                </div>
+            </div>
+
+            <div class="ambient-bg" id="ambientBg" style="background-image: url(&quot;https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?q=80&amp;w=400&amp;fit=crop&quot;);"></div>
+            <div class="glass-overlay"></div>
+
+            <div class="view-slider" id="viewSlider" style="transform: translateX(0%);">
+                
+                <!-- [视图 0] 居中悬浮分屏菜单 -->
+                <div class="view-panel split-view">
+                    <div class="left-menu" id="menuList"><div class="menu-item active"><span>专辑 (流)</span><div class="dot"></div></div><div class="menu-item "><span>播放</span><div class="dot"></div></div><div class="menu-item "><span>推荐</span><div class="dot"></div></div><div class="menu-item "><span>设置</span><div class="dot"></div></div></div>
+                    <div class="right-preview">
+                        <div class="preview-card show" id="previewCard" style="background-image: url(&quot;https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?q=80&amp;w=400&amp;fit=crop&quot;);">
+                            <div class="preview-info">
+                                <div class="preview-title" id="previewTitle">Cover Flow</div>
+                                <div class="preview-desc" id="previewDesc">旋转滚轮，在 3D 空间中流转你的精选专辑库。按确认播放。</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- [视图 1] 灵魂核心：3D Cover Flow -->
+                <div class="view-panel cover-flow-panel">
+                    <div class="cf-stage" id="cfStage"><div class="cf-item" style="background-image: url(&quot;https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?q=80&amp;w=400&amp;fit=crop&quot;); filter: brightness(1); transform: translateX(0px) translateZ(50px) rotateY(0deg) scale(1.15); opacity: 1; z-index: 20;"></div><div class="cf-item" style="background-image: url(&quot;https://images.unsplash.com/photo-1518609878373-06d740f60d8b?q=80&amp;w=400&amp;fit=crop&quot;); filter: brightness(0.4); transform: translateX(105px) translateZ(-40px) rotateY(-65deg) scale(0.9); opacity: 0.75; z-index: 9;"></div><div class="cf-item" style="background-image: url(&quot;https://images.unsplash.com/photo-1619983081563-430f63602796?q=80&amp;w=400&amp;fit=crop&quot;); filter: brightness(0.4); transform: translateX(130px) translateZ(-80px) rotateY(-65deg) scale(0.9); opacity: 0.5; z-index: 8;"></div><div class="cf-item" style="background-image: url(&quot;https://images.unsplash.com/photo-1493225457124-a1a2a53b111b?q=80&amp;w=400&amp;fit=crop&quot;); filter: brightness(0.4); transform: translateX(155px) translateZ(-120px) rotateY(-65deg) scale(0.9); opacity: 0.25; z-index: 7;"></div><div class="cf-item" style="background-image: url(&quot;https://images.unsplash.com/photo-1586772002130-b0f3daa6288b?q=80&amp;w=400&amp;fit=crop&quot;); filter: brightness(0.4); transform: translateX(180px) translateZ(-160px) rotateY(-65deg) scale(0.9); opacity: 0; z-index: 6;"></div><div class="cf-item" style="background-image: url(&quot;https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&amp;w=400&amp;fit=crop&quot;); filter: brightness(0.4); transform: translateX(205px) translateZ(-200px) rotateY(-65deg) scale(0.9); opacity: 0; z-index: 5;"></div></div>
+                    <div class="cf-info show" id="cfInfoBox">
+                        <div class="cf-title" id="cfTitle">Midnight City</div>
+                        <div class="cf-artist" id="cfArtist">M83</div>
+                    </div>
+                </div>
+                
+                <!-- [视图 2] 沉浸式播放器 -->
+                <div class="view-panel now-playing-panel">
+                    <div class="album-art-player" id="playerArt" style="background-image: url(&quot;https://images.unsplash.com/photo-1518609878373-06d740f60d8b?q=80&amp;w=400&amp;fit=crop&quot;); transform: scale(1) rotateX(0deg) rotateY(0deg);"></div>
+                    <div class="player-bottom-area">
+                        <div class="song-info">
+                            <div class="song-title" id="playerTitle">当前曲目</div>
+                            <div class="song-artist" id="playerArtist">The Weeknd</div>
+                        </div>
+                        <div class="progress-container">
+                            <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width: 31.6%;"></div></div>
+                            <div class="time-info"><span id="currentTime">01:11</span><span>03:46</span></div>
+                        </div>
+                        <div class="secondary-controls">
+                            <svg viewBox="0 0 24 24"><path d="M12,21.35l-1.45-1.32C5.4,15.36,2,12.28,2,8.5C2,5.42,4.42,3,7.5,3c1.74,0,3.41,0.81,4.5,2.09C13.09,3.81,14.76,3,16.5,3C19.58,3,22,5.42,22,8.5c0,3.78-3.4,6.86-8.55,11.54L12,21.35z"></path></svg>
+                            <svg viewBox="0 0 24 24"><path d="M20,2H4C2.9,2,2,2.9,2,4v18l4-4h14c1.1,0,2-0.9,2-2V4C22,2.9,21.1,2,20,2z M6,9h12v2H6V9z M14,13H6v-2h8V13z M18,17H6v-2h12V17z"></path></svg>
+                            <svg viewBox="0 0 24 24"><path d="M4,10h12v2H4V10z M4,6h16v2H4V6z M4,14h8v2H4V14z M18,14v4h-4v2h4v4h2v-4h4v-2h-4v-4H18z"></path></svg>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- 物理操控盘 -->
+        <div class="wheel-section">
+            <div class="click-wheel" id="clickWheel">
+                <div class="wheel-btn top" id="btnMenu">MENU</div>
+                <div class="wheel-btn right"><svg viewBox="0 0 24 24"><path d="M4,18l8.5-6L4,6V18z M13,18l8.5-6L13,6V18z M21.5,6v12H23V6H21.5z"></path></svg></div>
+                <div class="wheel-btn bottom"><svg viewBox="0 0 24 24"><path d="M6,19h4V5H6V19z M14,5v14h4V5H14z"></path></svg></div>
+                <div class="wheel-btn left"><svg viewBox="0 0 24 24"><path d="M11,18V6l-8.5,6L11,18z M20,18V6l-8.5,6L20,18z M2.5,6v12H1V6H2.5z"></path></svg></div>
+                <div class="center-button" id="btnCenter"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        setInterval(() => {
+            const now = new Date();
+            document.getElementById('clock').innerText = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+        }, 1000);
+
+        // ================= 数据结构 =================
+        const menuItems = [
+            { label: "专辑 (流)", type: "coverflow", img: "https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?q=80&w=400&fit=crop", title: "Cover Flow", desc: "旋转滚轮，在 3D 空间中流转你的精选专辑库。按确认播放。" },
+            { label: "播放", type: "player", img: "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?q=80&w=400&fit=crop", title: "当前曲目", desc: "▶ 正在播放... \n点击中心按键立刻进入全屏沉浸视角。" },
+            { label: "推荐", type: "menu", img: "https://images.unsplash.com/photo-1493225457124-a1a2a53b111b?q=80&w=400&fit=crop", title: "专属算法", desc: "基于你的数字音乐景观生成的高级推荐。" },
+            { label: "设置", type: "menu", img: "https://images.unsplash.com/photo-1586772002130-b0f3daa6288b?q=80&w=400&fit=crop", title: "系统控制", desc: "EQ 均衡器与空间音频深度调节。" }
+        ];
+
+        // 封面流独占音乐库数据
+        const coverFlowLibrary = [
+            { title: "Midnight City", artist: "M83", img: "https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?q=80&w=400&fit=crop" },
+            { title: "Lover Boy 88", artist: "Higher Brothers", img: "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?q=80&w=400&fit=crop" },
+            { title: "Starboy", artist: "The Weeknd", img: "https://images.unsplash.com/photo-1619983081563-430f63602796?q=80&w=400&fit=crop" },
+            { title: "Blinding Lights", artist: "The Weeknd", img: "https://images.unsplash.com/photo-1493225457124-a1a2a53b111b?q=80&w=400&fit=crop" },
+            { title: "Random Access", artist: "Daft Punk", img: "https://images.unsplash.com/photo-1586772002130-b0f3daa6288b?q=80&w=400&fit=crop" },
+            { title: "Plastic Love", artist: "Mariya Takeuchi", img: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=400&fit=crop" }
+        ];
+
+        // 视图状态机: 'menu' (0), 'coverflow' (1), 'player' (2)
+        let currentMode = 'menu';
+        let previousMode = 'menu'; // 记录返回路径
+        
+        let menuIndex = 0;
+        let cfIndex = 1; // 封面流初始中心索引
+        let playerProgress = 30; 
+
+        const viewSlider = document.getElementById('viewSlider');
+        const ambientBg = document.getElementById('ambientBg');
+        const menuListEl = document.getElementById('menuList');
+        const cfStage = document.getElementById('cfStage');
+        
+        // ================= 1. 渲染主菜单 =================
+        function renderMenu() {
+            menuListEl.innerHTML = '';
+            menuItems.forEach((item, index) => {
+                const div = document.createElement('div');
+                div.className = `menu-item ${index === menuIndex ? 'active' : ''}`;
+                div.innerHTML = `<span>${item.label}</span><div class="dot"></div>`;
+                menuListEl.appendChild(div);
+            });
+            updateMenuPreview();
+        }
+
+        function updateMenuPreview() {
+            const data = menuItems[menuIndex];
+            const card = document.getElementById('previewCard');
+            card.classList.remove('show');
+            setTimeout(() => {
+                ambientBg.style.backgroundImage = `url('${data.img}')`;
+                card.style.backgroundImage = `url('${data.img}')`;
+                document.getElementById('previewTitle').innerText = data.title;
+                document.getElementById('previewDesc').innerText = data.desc;
+                card.classList.add('show');
+            }, 200); 
+        }
+
+        // ================= 2. 渲染 3D 封面流核心算法 =================
+        function initCoverFlow() {
+            cfStage.innerHTML = '';
+            coverFlowLibrary.forEach((album, i) => {
+                const item = document.createElement('div');
+                item.className = 'cf-item';
+                item.style.backgroundImage = `url('${album.img}')`;
+                cfStage.appendChild(item);
+            });
+            updateCoverFlowPosition();
+        }
+
+        function updateCoverFlowPosition() {
+            const items = document.querySelectorAll('.cf-item');
+            const infoBox = document.getElementById('cfInfoBox');
+            infoBox.classList.remove('show'); // 文字切换动画
+
+            items.forEach((item, i) => {
+                const offset = i - cfIndex;
+                let tx = 0, tz = 0, ry = 0, scale = 1, opacity = 1, zIndex = 10;
+                
+                if (offset === 0) {
+                    // 当前选中的居中放大，正面朝向
+                    tx = 0; tz = 50; ry = 0; scale = 1.15; zIndex = 20;
+                    item.style.filter = 'brightness(1)';
+                } else {
+                    // 两侧的专辑：侧翻、变暗、向后退 (Z轴)
+                    const sign = Math.sign(offset);
+                    const absOffset = Math.abs(offset);
+                    // 动态计算堆叠距离，越远越紧密
+                    tx = sign * (80 + absOffset * 25);
+                    tz = -absOffset * 40;
+                    ry = -sign * 65; // 倾斜 65 度
+                    scale = 0.9;
+                    opacity = Math.max(1 - absOffset * 0.25, 0); // 太远则消失
+                    zIndex = 10 - absOffset;
+                    item.style.filter = 'brightness(0.4)';
+                }
+                
+                item.style.transform = `translateX(${tx}px) translateZ(${tz}px) rotateY(${ry}deg) scale(${scale})`;
+                item.style.opacity = opacity;
+                item.style.zIndex = zIndex;
+            });
+
+            // 更新底层环境光与标题
+            setTimeout(() => {
+                ambientBg.style.backgroundImage = `url('${coverFlowLibrary[cfIndex].img}')`;
+                document.getElementById('cfTitle').innerText = coverFlowLibrary[cfIndex].title;
+                document.getElementById('cfArtist').innerText = coverFlowLibrary[cfIndex].artist;
+                infoBox.classList.add('show');
+            }, 200);
+        }
+
+        // 初始化
+        renderMenu();
+        initCoverFlow();
+
+
+        // ================= 3. 滚轮多模式物理算法 =================
+        const clickWheel = document.getElementById('clickWheel');
+        let isDragging = false; let lastAngle = null; let accDelta = 0;
+
+        function getAngle(x, y) {
+            const rect = clickWheel.getBoundingClientRect();
+            return Math.atan2(y - (rect.top + rect.height / 2), x - (rect.left + rect.width / 2)) * (180 / Math.PI);
+        }
+
+        function startDrag(e) {
+            if(e.target.classList.contains('center-button') || e.target.closest('.wheel-btn')) return; 
+            isDragging = true;
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            lastAngle = getAngle(clientX, clientY);
+            accDelta = 0;
+        }
+
+        function drag(e) {
+            if (!isDragging) return;
+            if (e.cancelable) e.preventDefault(); 
+            const currentAngle = getAngle(e.touches ? e.touches[0].clientX : e.clientX, e.touches ? e.touches[0].clientY : e.clientY);
+            let delta = currentAngle - lastAngle;
+
+            if (delta > 180) delta -= 360;
+            if (delta < -180) delta += 360;
+
+            if (currentMode === 'menu') {
+                accDelta += delta;
+                if (Math.abs(accDelta) > 18) {
+                    if (accDelta > 0) menuIndex = Math.min(menuItems.length - 1, menuIndex + 1);
+                    else menuIndex = Math.max(0, menuIndex - 1);
+                    renderMenu();
+                    accDelta = 0;
+                }
+            } 
+            else if (currentMode === 'coverflow') {
+                // 封面流滑动阻尼，手感极佳
+                accDelta += delta;
+                if (Math.abs(accDelta) > 22) { // 阈值略大，翻转更有重量感
+                    if (accDelta > 0) cfIndex = Math.min(coverFlowLibrary.length - 1, cfIndex + 1);
+                    else cfIndex = Math.max(0, cfIndex - 1);
+                    updateCoverFlowPosition();
+                    accDelta = 0;
+                }
+            }
+            else if (currentMode === 'player') {
+                // 播放器内丝滑调进度
+                if (Math.abs(delta) > 1.5) {
+                    playerProgress = delta > 0 ? Math.min(100, playerProgress + 0.4) : Math.max(0, playerProgress - 0.4);
+                    document.getElementById('progressFill').style.width = `${playerProgress}%`;
+                    const sec = (playerProgress / 100) * 226;
+                    document.getElementById('currentTime').innerText = `${Math.floor(sec / 60).toString().padStart(2, '0')}:${Math.floor(sec % 60).toString().padStart(2, '0')}`;
+                    document.getElementById('playerArt').style.transform = `scale(0.95) rotateX(${delta>0?3:-3}deg) rotateY(${delta>0?-3:3}deg)`;
+                }
+            }
+            lastAngle = currentAngle;
+        }
+
+        function stopDrag() {
+            isDragging = false;
+            if (currentMode === 'player') document.getElementById('playerArt').style.transform = `scale(1) rotateX(0deg) rotateY(0deg)`;
+        }
+
+        clickWheel.addEventListener('mousedown', startDrag);
+        document.addEventListener('mousemove', drag, { passive: false });
+        document.addEventListener('mouseup', stopDrag);
+        clickWheel.addEventListener('touchstart', startDrag, { passive: false });
+        document.addEventListener('touchmove', drag, { passive: false });
+        document.addEventListener('touchend', stopDrag);
+
+        // ================= 4. 空间状态机切换 (点击按键) =================
+        function slideToView(viewIndex) {
+            viewSlider.style.transform = `translateX(-${viewIndex * 100}%)`;
+        }
+
+        document.getElementById('btnCenter').addEventListener('click', () => {
+            if (currentMode === 'menu') {
+                const action = menuItems[menuIndex].type;
+                if (action === 'coverflow') {
+                    // 进入封面流界面
+                    currentMode = 'coverflow';
+                    previousMode = 'menu';
+                    slideToView(1);
+                    updateCoverFlowPosition(); // 刷新一下环境光
+                } else if (action === 'player') {
+                    // 直接从主页进播放器
+                    currentMode = 'player';
+                    previousMode = 'menu';
+                    document.getElementById('playerArt').style.backgroundImage = `url('${menuItems[menuIndex].img}')`;
+                    document.getElementById('playerTitle').innerText = menuItems[menuIndex].title;
+                    slideToView(2);
+                }
+            } 
+            else if (currentMode === 'coverflow') {
+                // 在封面流里挑中了一首歌，按下确认进入播放器
+                currentMode = 'player';
+                previousMode = 'coverflow'; // 记住是从封面流进来的
+                const album = coverFlowLibrary[cfIndex];
+                document.getElementById('playerArt').style.backgroundImage = `url('${album.img}')`;
+                document.getElementById('playerTitle').innerText = album.title;
+                document.getElementById('playerArtist').innerText = album.artist;
+                slideToView(2);
+            }
+        });
+
+        document.getElementById('btnMenu').addEventListener('click', () => {
+            if (currentMode === 'player') {
+                // 如果是从封面流进来的，退回封面流；否则退回主菜单
+                if (previousMode === 'coverflow') {
+                    currentMode = 'coverflow';
+                    slideToView(1);
+                    ambientBg.style.backgroundImage = `url('${coverFlowLibrary[cfIndex].img}')`;
+                } else {
+                    currentMode = 'menu';
+                    slideToView(0);
+                    ambientBg.style.backgroundImage = `url('${menuItems[menuIndex].img}')`;
+                }
+            } 
+            else if (currentMode === 'coverflow') {
+                // 退出封面流，回到主菜单
+                currentMode = 'menu';
+                slideToView(0);
+                ambientBg.style.backgroundImage = `url('${menuItems[menuIndex].img}')`;
+            }
+        });
+    </script>
+<script>
+(function () {
+    var sessionId = "session_1784049422210_42956";
+    var sourceName = "html_runner_console";
+    var methods = ["log", "info", "warn", "error"];
+    var originalConsole = window.console || {};
+    function formatValue(value) {
+        if (value === null) {
+            return "null";
+        }
+        if (typeof value === "undefined") {
+            return "undefined";
+        }
+        if (typeof value === "string") {
+            return value;
+        }
+        if (typeof value === "number" || typeof value === "boolean") {
+            return String(value);
+        }
+        try {
+            return JSON.stringify(value);
+        } catch (e) {
+            return Object.prototype.toString.call(value);
+        }
+    }
+    function sendMessage(level, args) {
+        var list = [];
+        var i = 0;
+        for (i = 0; i < args.length; i++) {
+            list.push(formatValue(args[i]));
+        }
+        if (window.parent && window.parent !== window && window.parent.postMessage) {
+            window.parent.postMessage({ source: sourceName, sessionId: sessionId, level: level, text: list.join(" ") }, "*");
+        }
+        if (window.opener && window.opener.postMessage) {
+            window.opener.postMessage({ source: sourceName, sessionId: sessionId, level: level, text: list.join(" ") }, "*");
+        }
+    }
+    function patchConsole(method) {
+        var rawMethod = originalConsole[method];
+        console[method] = function () {
+            sendMessage(method, arguments);
+            if (rawMethod && rawMethod.apply) {
+                rawMethod.apply(originalConsole, arguments);
+            }
+        };
+    }
+    for (var i = 0; i < methods.length; i++) {
+        patchConsole(methods[i]);
+    }
+    window.onerror = function (message, source, lineno, colno) {
+        sendMessage("error", [message, source || "", "line:" + (lineno || 0), "col:" + (colno || 0)]);
+    };
+    window.onunhandledrejection = function (event) {
+        var reason = event && event.reason ? event.reason : "Promise rejection";
+        sendMessage("error", [reason]);
+    };
+})();
+</script>
+
+</body></html>

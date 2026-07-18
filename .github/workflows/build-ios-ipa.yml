@@ -1,0 +1,58 @@
+name: Build iOS IPA
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-ipa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-unsigned-ipa:
+    name: Build unsigned IPA
+    runs-on: macos-15
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.4"
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze source
+        run: flutter analyze
+
+      - name: Run tests
+        run: flutter test
+
+      - name: Build iOS app without signing
+        run: flutter build ios --release --no-codesign --build-number "${GITHUB_RUN_NUMBER}"
+
+      - name: Package IPA
+        run: |
+          rm -rf Payload IcePods-unsigned.ipa
+          mkdir Payload
+          cp -R build/ios/iphoneos/Runner.app Payload/
+          ditto -c -k --sequesterRsrc --keepParent Payload IcePods-unsigned.ipa
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: IcePods-iOS-${{ github.run_number }}
+          path: IcePods-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14
