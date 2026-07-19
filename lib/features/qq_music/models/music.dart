@@ -1,5 +1,24 @@
 enum QqMusicItemType { song, playlist, chart, singer, album, musicVideo }
 
+enum QqMusicFeature {
+  guessRecommendations,
+  homeFeed,
+  radar,
+  newSongs,
+  recommendedPlaylists,
+  charts,
+  singers,
+  likedSongs,
+  favoriteAlbums,
+  favoriteMusicVideos,
+  favoriteSingers,
+  createdPlaylists,
+  collectedPlaylists,
+  dislikes,
+  search,
+  account,
+}
+
 enum QqMusicPlaybackMode { sequential, repeatOne, shuffle }
 
 class QqMusicLyricWord {
@@ -172,151 +191,6 @@ class QqMusicFeatureResult {
       'message': message,
     };
   }
-}
-
-class QqMusicCredential {
-  const QqMusicCredential({
-    required this.musicId,
-    required this.musicKey,
-    this.openId = '',
-    this.refreshToken = '',
-    this.accessToken = '',
-    this.expiredAt = 0,
-    this.unionId = '',
-    this.stringMusicId = '',
-    this.refreshKey = '',
-    this.encryptUin = '',
-  });
-
-  factory QqMusicCredential.fromJson(Map<String, dynamic> json) {
-    return QqMusicCredential(
-      musicId: _stringValue(json['musicid']),
-      musicKey: _stringValue(json['musickey']),
-      openId: _stringValue(json['openid']),
-      refreshToken: _stringValue(json['refresh_token']),
-      accessToken: _stringValue(json['access_token']),
-      expiredAt: _intValue(json['expired_at']),
-      unionId: _stringValue(json['unionid']),
-      stringMusicId: _stringValue(json['str_musicid']),
-      refreshKey: _stringValue(json['refresh_key']),
-      encryptUin: _stringValue(json['encrypt_uin'] ?? json['encryptUin']),
-    );
-  }
-
-  final String musicId;
-  final String musicKey;
-  final String openId;
-  final String refreshToken;
-  final String accessToken;
-  final int expiredAt;
-  final String unionId;
-  final String stringMusicId;
-  final String refreshKey;
-  final String encryptUin;
-
-  bool get isValid => musicId.isNotEmpty && musicKey.isNotEmpty;
-
-  Map<String, String> toStorage() {
-    return {
-      'musicid': musicId,
-      'musickey': musicKey,
-      'openid': openId,
-      'refresh_token': refreshToken,
-      'access_token': accessToken,
-      'expired_at': expiredAt.toString(),
-      'unionid': unionId,
-      'str_musicid': stringMusicId,
-      'refresh_key': refreshKey,
-      'encrypt_uin': encryptUin,
-    };
-  }
-
-  Map<String, String> get cookieFields => <String, String>{
-    'musicid': musicId,
-    'musickey': musicKey,
-    'openid': openId,
-    'refresh_token': refreshToken,
-    'access_token': accessToken,
-    'expired_at': expiredAt.toString(),
-    'unionid': unionId,
-    'str_musicid': stringMusicId,
-    'refresh_key': refreshKey,
-  };
-
-  String toCookie() {
-    return cookieFields.entries
-        .where((entry) => entry.value.isNotEmpty && entry.value != '0')
-        .map((entry) => '${entry.key}=${entry.value}')
-        .join('; ');
-  }
-}
-
-class QqMusicQrCode {
-  const QqMusicQrCode({
-    required this.loginType,
-    required this.identifier,
-    required this.mimeType,
-    required this.imageBytes,
-  });
-
-  final String loginType;
-  final String identifier;
-  final String mimeType;
-  final List<int> imageBytes;
-}
-
-class QqMusicQrStatus {
-  const QqMusicQrStatus({
-    required this.event,
-    required this.done,
-    required this.identifier,
-    required this.loginType,
-    this.credential,
-  });
-
-  final int event;
-  final bool done;
-  final String identifier;
-  final String loginType;
-  final QqMusicCredential? credential;
-
-  String get message => switch (event) {
-    0 => '登录成功',
-    1 => '等待扫码',
-    2 => '已扫码，请在手机上确认',
-    3 => '二维码已过期',
-    4 => '登录已取消',
-    _ => '登录状态异常',
-  };
-}
-
-class QqMusicUserProfile {
-  const QqMusicUserProfile({
-    required this.id,
-    required this.nickname,
-    required this.avatarUrl,
-    this.isVip,
-  });
-
-  final String id;
-  final String nickname;
-  final String avatarUrl;
-  final bool? isVip;
-
-  bool get hasConfirmedVipStatus => isVip != null;
-}
-
-class QqMusicApiException implements Exception {
-  const QqMusicApiException(this.message, {this.statusCode, this.code});
-
-  final String message;
-  final int? statusCode;
-  final int? code;
-
-  bool get isUnauthorized => statusCode == 401;
-
-  @override
-  String toString() => message;
 }
 
 String _stringValue(Object? value) => value?.toString() ?? '';

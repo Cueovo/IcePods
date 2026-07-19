@@ -2,9 +2,10 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
+import '../features/qq_music/models/account.dart';
+import '../features/qq_music/models/music.dart';
+import '../features/qq_music/player/controller.dart';
 import '../ipod_models.dart';
-import '../services/qq_music_controller.dart';
-import '../services/qq_music_models.dart';
 import '../ui_tokens.dart';
 import 'artwork_image.dart';
 import 'menu_artwork.dart';

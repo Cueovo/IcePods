@@ -1,6 +1,6 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-import 'qq_music_models.dart';
+import '../models/auth.dart';
 
 abstract interface class QqMusicCredentialStore {
   Future<QqMusicCredential?> read();
@@ -29,6 +29,12 @@ class SecureQqMusicCredentialStore implements QqMusicCredentialStore {
     'refresh_key',
     'encrypt_uin',
     'encryptUin',
+    'login_type',
+    'loginType',
+    'musickey_create_time',
+    'musickeyCreateTime',
+    'key_expires_in',
+    'keyExpiresIn',
   };
 
   @override

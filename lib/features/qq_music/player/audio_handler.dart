@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
 
-import 'qq_music_models.dart';
+import '../models/music.dart';
 
 class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
   QqMusicAudioHandler({AudioPlayer? audioPlayer})

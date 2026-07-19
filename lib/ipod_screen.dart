@@ -3,13 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'features/qq_music/core/api.dart';
+import 'features/qq_music/modules/official_api.dart';
+import 'features/qq_music/player/audio_handler.dart';
+import 'features/qq_music/player/controller.dart';
 import 'ipod_models.dart';
 import 'menu_catalog.dart';
 import 'services/click_sound_service.dart';
-import 'services/qq_music_api.dart';
-import 'services/qq_music_audio_handler.dart';
-import 'services/qq_music_controller.dart';
-import 'services/qq_music_http_api.dart';
 import 'widgets/ambient_background.dart'
     if (dart.library.js_interop) 'widgets/ambient_background_web.dart';
 import 'widgets/click_wheel.dart';
@@ -73,7 +73,7 @@ class _IpodDeviceState extends State<_IpodDevice> {
   void initState() {
     super.initState();
     _qqMusicController = QqMusicController(
-      api: widget.api ?? QqMusicHttpApi(),
+      api: widget.api ?? QqMusicOfficialApi(),
       audioHandler: widget.audioHandler,
     )..addListener(_handleApiStateChange);
     _lastControllerIsPlaying = _qqMusicController.isPlaying;

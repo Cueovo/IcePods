@@ -6,11 +6,14 @@ import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../ipod_models.dart';
-import 'audio_output_service.dart';
-import 'qq_music_api.dart';
-import 'qq_music_audio_handler.dart';
-import 'qq_music_models.dart';
+import '../../../ipod_models.dart';
+import '../../../services/audio_output_service.dart';
+import '../core/api.dart';
+import '../models/account.dart';
+import '../models/api_exception.dart';
+import '../models/auth.dart';
+import '../models/music.dart';
+import 'audio_handler.dart';
 
 class QqMusicPlaybackProgress {
   const QqMusicPlaybackProgress({
@@ -154,6 +157,7 @@ class QqMusicController extends ChangeNotifier {
   final List<QqMusicItem?> _containerPath = [];
   final Map<QqMusicFeature, QqMusicFeatureResult> _featureCache = {};
   final Map<QqMusicFeature, int> _featurePages = {};
+  final Map<String, int> _childrenPages = {};
   final Map<String, QqMusicFeatureResult> _childrenCache = {};
   final Map<String, _PrefetchedPlayableUrl> _prefetchedPlayableUrls = {};
   final Map<String, QqMusicLyrics> _lyricsCache = {};
@@ -167,6 +171,7 @@ class QqMusicController extends ChangeNotifier {
   Timer? _qrPollTimer;
   bool _audioSessionConfigured = false;
   bool _pollingQr = false;
+  bool _loadingMore = false;
   bool _handlingPlaybackCompletion = false;
   bool _switchingTrack = false;
   bool _loadingAudioSource = false;
@@ -472,9 +477,7 @@ class QqMusicController extends ChangeNotifier {
     }
     _selectedIndex = index;
     notifyListeners();
-    if (_entry?.feature == QqMusicFeature.radar) {
-      unawaited(_maybeLoadMoreRadar());
-    }
+    unawaited(_maybeLoadMore());
   }
 
   bool canToggleMark(QqMusicItem item) {
@@ -636,80 +639,76 @@ class QqMusicController extends ChangeNotifier {
     if (next != _selectedIndex) {
       _selectedIndex = next;
       notifyListeners();
-      if (_entry?.feature == QqMusicFeature.radar) {
-        unawaited(_maybeLoadMoreRadar());
-      }
+      unawaited(_maybeLoadMore());
+    } else if (direction > 0) {
+      unawaited(_maybeLoadMore());
     }
   }
 
-  Future<void> _maybeLoadMoreRadar() async {
+  Future<void> _maybeLoadMore() async {
     final active = result;
     final feature = _entry?.feature;
+    final container = currentContainer;
     if (active == null ||
-        feature != QqMusicFeature.radar ||
         !active.hasMore ||
-        _isLoading ||
-        _selectedIndex < items.length - 3) {
+        _loadingMore ||
+        _selectedIndex < items.length - 3 ||
+        (container == null &&
+            (feature == null ||
+                feature == QqMusicFeature.search ||
+                feature == QqMusicFeature.account))) {
       return;
     }
-    final nextPage = (_featurePages[feature] ?? 1) + 1;
-    final keepIndex = _selectedIndex;
+    final containerKey = container == null ? null : _itemKey(container);
+    final nextPage = containerKey == null
+        ? (_featurePages[feature] ?? 1) + 1
+        : (_childrenPages[containerKey] ?? 1) + 1;
+    _loadingMore = true;
     try {
-      final loaded = await api.loadFeature(
-        QqMusicFeature.radar,
-        page: nextPage,
-      );
-      if (loaded.items.isEmpty) {
-        _featurePages[feature!] = nextPage;
-        final exhausted = QqMusicFeatureResult(
-          title: active.title,
-          items: active.items,
-          hasMore: false,
-          message: active.message,
-        );
-        _resultPath
-          ..clear()
-          ..add(exhausted);
-        _containerPath
-          ..clear()
-          ..add(null);
-        _selectedIndex = keepIndex.clamp(0, exhausted.items.length - 1);
-        _featureCache[feature] = exhausted;
-        notifyListeners();
+      final loaded = container == null
+          ? await api.loadFeature(feature!, page: nextPage)
+          : await api.loadChildren(container, page: nextPage);
+      if (!identical(result, active) || currentContainer != container) {
         return;
       }
       final merged = <QqMusicItem>[...active.items];
       final seen = <String>{
-        for (final item in active.items)
-          item.id.isNotEmpty ? item.id : item.mid,
+        for (final item in merged) _paginationItemKey(item),
       };
+      final appended = <QqMusicItem>[];
       for (final item in loaded.items) {
-        final key = item.id.isNotEmpty ? item.id : item.mid;
-        if (key.isEmpty || !seen.add(key)) {
+        if (!seen.add(_paginationItemKey(item))) {
           continue;
         }
         merged.add(item);
+        appended.add(item);
       }
       final updated = QqMusicFeatureResult(
         title: active.title,
         items: List.unmodifiable(merged),
-        hasMore: loaded.hasMore,
+        hasMore: appended.isNotEmpty && loaded.hasMore,
         message: loaded.message,
+        updatedAt: DateTime.now().toUtc(),
+        isFromCache: false,
       );
-      _featurePages[feature!] = nextPage;
-      _resultPath
-        ..clear()
-        ..add(updated);
-      _containerPath
-        ..clear()
-        ..add(null);
-      _selectedIndex = keepIndex.clamp(0, updated.items.length - 1);
-      _featureCache[feature] = updated;
+      _resultPath[_resultPath.length - 1] = updated;
+      _selectedIndex = _selectedIndex.clamp(0, updated.items.length - 1);
+      if (containerKey == null) {
+        _featurePages[feature!] = nextPage;
+        _featureCache[feature] = updated;
+      } else {
+        _childrenPages[containerKey] = nextPage;
+        _childrenCache[containerKey] = updated;
+      }
       notifyListeners();
-      await _probePlayableUrls(loaded.items);
+      if (appended.isNotEmpty) {
+        unawaited(_probePlayableUrls(appended));
+      }
     } catch (error) {
       _error = _message(error);
       notifyListeners();
+    } finally {
+      _loadingMore = false;
     }
   }
 
@@ -780,6 +779,7 @@ class QqMusicController extends ChangeNotifier {
       parent: item,
       cacheChildrenKey: cacheKey,
     );
+    _childrenPages[cacheKey] = 1;
     return true;
   }
 
@@ -1393,6 +1393,7 @@ class QqMusicController extends ChangeNotifier {
     await api.logout();
     _featureCache.clear();
     _featurePages.clear();
+    _childrenPages.clear();
     _childrenCache.clear();
     _prefetchedPlayableUrls.clear();
     _unavailableSongKeys.clear();
@@ -1604,7 +1605,27 @@ class QqMusicController extends ChangeNotifier {
     return item.id == other.id;
   }
 
-  String _itemKey(QqMusicItem item) => '${item.type.name}:${item.id}';
+  String _itemKey(QqMusicItem item) {
+    final identity = item.id.isNotEmpty && item.id != '0'
+        ? item.id
+        : item.directoryId.isNotEmpty
+        ? item.directoryId
+        : item.mid.isNotEmpty
+        ? item.mid
+        : '${item.title}:${item.subtitle}';
+    return '${item.type.name}:$identity';
+  }
+
+  String _paginationItemKey(QqMusicItem item) {
+    final identity = item.mid.isNotEmpty
+        ? item.mid
+        : item.id.isNotEmpty
+        ? item.id
+        : item.directoryId.isNotEmpty
+        ? item.directoryId
+        : '${item.title}:${item.subtitle}';
+    return '${item.type.name}:$identity';
+  }
 
   String _message(Object error) {
     if (error is QqMusicApiException) {

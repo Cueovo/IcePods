@@ -1,8 +1,10 @@
 import 'dart:convert';
 
-import 'package:qqmusic_ipod/ipod_models.dart';
-import 'package:qqmusic_ipod/services/qq_music_api.dart';
-import 'package:qqmusic_ipod/services/qq_music_models.dart';
+import 'package:qqmusic_ipod/features/qq_music/core/api.dart';
+import 'package:qqmusic_ipod/features/qq_music/models/account.dart';
+import 'package:qqmusic_ipod/features/qq_music/models/api_exception.dart';
+import 'package:qqmusic_ipod/features/qq_music/models/auth.dart';
+import 'package:qqmusic_ipod/features/qq_music/models/music.dart';
 
 class FakeQqMusicApi implements QqMusicApi {
   QqMusicCredential? storedCredential;
@@ -13,6 +15,10 @@ class FakeQqMusicApi implements QqMusicApi {
   final List<({QqMusicItem song, bool liked})> songLikedChanges = [];
   final Map<String, int> childrenLoadCounts = {};
   final List<int> radarPagesLoaded = [];
+  final List<int> likedSongPagesLoaded = [];
+  final List<int> childrenPagesLoaded = [];
+  bool paginateLikedSongs = false;
+  bool paginateChildren = false;
   bool? profileIsVip = true;
   int qrStatusChecks = 0;
 
@@ -205,6 +211,28 @@ class FakeQqMusicApi implements QqMusicApi {
     int pageSize = 25,
   }) async {
     childrenLoadCounts.update(item.id, (count) => count + 1, ifAbsent: () => 1);
+    if (paginateChildren) {
+      childrenPagesLoaded.add(page);
+      final pageSongs = List<QqMusicItem>.generate(25, (index) {
+        final id = ((page - 1) * 25) + index + 1;
+        return QqMusicItem(
+          id: 'child-$id',
+          mid: 'child-mid-$id',
+          mediaMid: 'child-media-$id',
+          title: '歌单歌曲$id',
+          subtitle: '歌单歌手',
+          imageUrl: '',
+          type: QqMusicItemType.song,
+          duration: const Duration(minutes: 3),
+          songType: 1,
+        );
+      });
+      return QqMusicFeatureResult(
+        title: item.title,
+        items: pageSongs,
+        hasMore: page < 2,
+      );
+    }
     if (item.hasEmbeddedChildren) {
       return QqMusicFeatureResult(title: item.title, items: item.children);
     }
@@ -222,6 +250,28 @@ class FakeQqMusicApi implements QqMusicApi {
       forcedFeatureRefreshes.add(feature);
     }
     featureLoadCounts.update(feature, (count) => count + 1, ifAbsent: () => 1);
+    if (feature == QqMusicFeature.likedSongs && paginateLikedSongs) {
+      likedSongPagesLoaded.add(page);
+      final pageSongs = List<QqMusicItem>.generate(25, (index) {
+        final id = ((page - 1) * 25) + index + 1;
+        return QqMusicItem(
+          id: 'liked-$id',
+          mid: 'liked-mid-$id',
+          mediaMid: 'liked-media-$id',
+          title: '喜欢歌曲$id',
+          subtitle: '喜欢歌手',
+          imageUrl: '',
+          type: QqMusicItemType.song,
+          duration: const Duration(minutes: 3),
+          songType: 1,
+        );
+      });
+      return QqMusicFeatureResult(
+        title: '我喜欢的音乐',
+        items: pageSongs,
+        hasMore: page < 3,
+      );
+    }
     if (feature == QqMusicFeature.radar) {
       radarPagesLoaded.add(page);
       final pageSongs = List<QqMusicItem>.generate(10, (index) {

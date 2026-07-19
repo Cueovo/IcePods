@@ -1,5 +1,6 @@
-import '../ipod_models.dart';
-import 'qq_music_models.dart';
+import 'dart:convert';
+
+import '../models/music.dart';
 
 class QqMusicResponseParser {
   const QqMusicResponseParser();
@@ -65,15 +66,137 @@ class QqMusicResponseParser {
     );
   }
 
-  QqMusicFeatureResult parseChildren(QqMusicItem parent, Object? data) {
+  QqMusicFeatureResult parseChildren(
+    QqMusicItem parent,
+    Object? data, {
+    int limit = 25,
+    int page = 1,
+  }) {
     final map = _map(data);
     final rawSongs = map['songs'] ?? map['song_list'] ?? map['songlist'];
+    final items = _songs(rawSongs);
+    final returnedSize = _int(map['size']);
+    final total = _int(map['total']);
+    final loadedThrough =
+        (page - 1) * limit + (returnedSize > 0 ? returnedSize : items.length);
     return QqMusicFeatureResult(
       title: parent.title,
-      items: _songs(rawSongs),
-      hasMore: _bool(map['has_more']) || _int(map['hasmore']) != 0,
+      items: items,
+      hasMore:
+          _bool(map['has_more']) ||
+          _int(map['hasmore']) != 0 ||
+          (total > 0 && loadedThrough < total),
       message: _string(map['msg']),
     );
+  }
+
+  QqMusicLyrics parseLyrics(Object? data) {
+    final map = _map(data);
+    var raw = _string(map['lyric']);
+    if (raw.isEmpty) {
+      raw = _string(map['qrc']);
+    }
+    if (raw.isEmpty) {
+      raw = _string(map['lrc']);
+    }
+    raw = _decodeLyric(raw);
+    final qrcLines = _parseQrcLyrics(raw);
+    if (qrcLines.isNotEmpty) {
+      return QqMusicLyrics(lines: List.unmodifiable(qrcLines));
+    }
+    return QqMusicLyrics(lines: List.unmodifiable(_parseLrcLyrics(raw)));
+  }
+
+  String _decodeLyric(String raw) {
+    var decoded = raw;
+    if (decoded.isNotEmpty &&
+        !decoded.contains('[') &&
+        !decoded.contains('<Lyric_1')) {
+      try {
+        decoded = utf8.decode(base64Decode(decoded));
+      } catch (_) {}
+    }
+    final content = RegExp(
+      'LyricContent="([\\s\\S]*?)"',
+    ).firstMatch(decoded)?.group(1);
+    return (content ?? decoded)
+        .replaceAll('&#10;', '\n')
+        .replaceAll('&#13;', '\r')
+        .replaceAll('&quot;', '"')
+        .replaceAll('&apos;', "'")
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>')
+        .replaceAll('&amp;', '&');
+  }
+
+  List<QqMusicLyricLine> _parseQrcLyrics(String raw) {
+    final lines = <QqMusicLyricLine>[];
+    final linePattern = RegExp(r'^\[(\d+),(\d+)\](.*)$');
+    final wordPattern = RegExp(r'([^()]*)\((\d+),(\d+)\)');
+    for (final sourceLine in const LineSplitter().convert(raw)) {
+      final lineMatch = linePattern.firstMatch(sourceLine.trim());
+      if (lineMatch == null) {
+        continue;
+      }
+      final lineStart = int.parse(lineMatch.group(1)!);
+      final lineDuration = int.parse(lineMatch.group(2)!);
+      final words = <QqMusicLyricWord>[];
+      for (final match in wordPattern.allMatches(lineMatch.group(3)!)) {
+        final text = match.group(1) ?? '';
+        if (text.isEmpty || text == '\r') {
+          continue;
+        }
+        words.add(
+          QqMusicLyricWord(
+            text: text,
+            time: Duration(milliseconds: int.parse(match.group(2)!)),
+            duration: Duration(milliseconds: int.parse(match.group(3)!)),
+          ),
+        );
+      }
+      if (words.isEmpty) {
+        continue;
+      }
+      lines.add(
+        QqMusicLyricLine(
+          time: Duration(milliseconds: lineStart),
+          duration: Duration(milliseconds: lineDuration),
+          text: words.map((word) => word.text).join(),
+          words: List.unmodifiable(words),
+        ),
+      );
+    }
+    lines.sort((left, right) => left.time.compareTo(right.time));
+    return lines;
+  }
+
+  List<QqMusicLyricLine> _parseLrcLyrics(String raw) {
+    final lines = <QqMusicLyricLine>[];
+    final timestamp = RegExp(r'\[(\d{1,3}):(\d{2})(?:[.:](\d{1,3}))?\]');
+    for (final sourceLine in const LineSplitter().convert(raw)) {
+      final matches = timestamp.allMatches(sourceLine).toList(growable: false);
+      final text = sourceLine.replaceAll(timestamp, '').trim();
+      if (matches.isEmpty || text.isEmpty) {
+        continue;
+      }
+      for (final match in matches) {
+        final fraction = match.group(3) ?? '';
+        lines.add(
+          QqMusicLyricLine(
+            time: Duration(
+              minutes: int.parse(match.group(1)!),
+              seconds: int.parse(match.group(2)!),
+              milliseconds: fraction.isEmpty
+                  ? 0
+                  : int.parse(fraction.padRight(3, '0').substring(0, 3)),
+            ),
+            text: text,
+          ),
+        );
+      }
+    }
+    lines.sort((left, right) => left.time.compareTo(right.time));
+    return lines;
   }
 
   QqMusicItem parseSongDetail(Object? data) {

@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'ipod_screen.dart';
-import 'services/qq_music_api.dart';
-import 'services/qq_music_audio_handler.dart';
+import 'features/qq_music/core/api.dart';
+import 'features/qq_music/player/audio_handler.dart';
 import 'ui_tokens.dart';
 
 Future<void> main() async {

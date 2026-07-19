@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../features/qq_music/models/music.dart';
 import '../ipod_models.dart';
 
 class MenuArtwork extends StatelessWidget {

@@ -2,11 +2,13 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:qqmusic_ipod/features/qq_music/models/api_exception.dart';
+import 'package:qqmusic_ipod/features/qq_music/models/auth.dart';
+import 'package:qqmusic_ipod/features/qq_music/models/music.dart';
+import 'package:qqmusic_ipod/features/qq_music/player/controller.dart';
 import 'package:qqmusic_ipod/ipod_models.dart';
-import 'package:qqmusic_ipod/services/qq_music_controller.dart';
-import 'package:qqmusic_ipod/services/qq_music_models.dart';
 
-import 'fake_qq_music_api.dart';
+import 'fake_api.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -533,6 +535,67 @@ void main() {
     expect(api.playableUrlRequestMids, contains(FakeQqMusicApi.songs[1].mid));
     expect(loadedSongs, isEmpty);
   });
+
+  test('song containers append the next page near the end', () async {
+    const playlistsEntry = MenuEntry(
+      id: 'created-playlists-test',
+      label: '自建歌单',
+      action: MenuAction.feature,
+      imageUrl: '',
+      title: '自建歌单',
+      description: '',
+      feature: QqMusicFeature.createdPlaylists,
+    );
+    api.paginateChildren = true;
+
+    await controller.openFeature(playlistsEntry);
+    expect(await controller.activateSelected(), isTrue);
+    expect(api.childrenPagesLoaded, [1]);
+    expect(controller.items, hasLength(25));
+
+    controller.selectIndex(23);
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(api.childrenPagesLoaded, [1, 2]);
+    expect(controller.items, hasLength(50));
+    expect(controller.selectedIndex, 23);
+    expect(controller.result?.hasMore, isFalse);
+    expect(controller.items.last.title, '歌单歌曲50');
+  });
+
+  test(
+    'liked songs append every page near the end without moving selection',
+    () async {
+      api.paginateLikedSongs = true;
+
+      await controller.openFeature(likedSongsEntry);
+      expect(api.likedSongPagesLoaded, [1]);
+      expect(controller.items, hasLength(25));
+      expect(controller.result?.hasMore, isTrue);
+
+      controller.selectIndex(23);
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(api.likedSongPagesLoaded, [1, 2]);
+      expect(controller.items, hasLength(50));
+      expect(controller.selectedIndex, 23);
+
+      controller.selectIndex(48);
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(api.likedSongPagesLoaded, [1, 2, 3]);
+      expect(controller.items, hasLength(75));
+      expect(controller.selectedIndex, 48);
+      expect(controller.result?.hasMore, isFalse);
+      expect(controller.items.last.title, '喜欢歌曲75');
+    },
+  );
 
   test(
     'radar loads the next page near the end of the current stations',

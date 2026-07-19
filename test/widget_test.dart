@@ -5,16 +5,16 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:just_audio/just_audio.dart';
 
 import 'package:qqmusic_ipod/app.dart';
+import 'package:qqmusic_ipod/features/qq_music/models/music.dart';
+import 'package:qqmusic_ipod/features/qq_music/player/controller.dart';
 import 'package:qqmusic_ipod/ipod_models.dart';
 import 'package:qqmusic_ipod/menu_catalog.dart';
-import 'package:qqmusic_ipod/services/qq_music_controller.dart';
-import 'package:qqmusic_ipod/services/qq_music_models.dart';
 import 'package:qqmusic_ipod/widgets/click_wheel.dart';
 import 'package:qqmusic_ipod/widgets/cover_flow_panel.dart';
 import 'package:qqmusic_ipod/widgets/feature_panel.dart';
 import 'package:qqmusic_ipod/widgets/now_playing_panel.dart';
 
-import 'fake_qq_music_api.dart';
+import 'features/qq_music/player/fake_api.dart';
 
 void main() {
   test('every feature menu has API integration metadata', () {
@@ -28,7 +28,7 @@ void main() {
       expect(entry.feature, isNotNull, reason: entry.id);
       expect(entry.apiOperation, isNotEmpty, reason: entry.id);
       expect(
-        swaggerMenuOperations,
+        qqMusicApiOperations,
         contains(entry.apiOperation),
         reason: entry.id,
       );
@@ -122,6 +122,7 @@ void main() {
       await tester.tap(wheel);
       await tester.pumpAndSettle();
       await tester.tap(wheel);
+      await tester.pump();
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 700));
 
@@ -759,7 +760,10 @@ void main() {
     await tester.tap(wheel);
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('api-feature-list')), findsOneWidget);
-    expect(find.text('GET /recommend/get_guess_recommend'), findsNothing);
+    expect(
+      find.text('music.radioProxy.MbTrackRadioSvr.get_radio_track'),
+      findsNothing,
+    );
     expect(find.text('测试歌曲一'), findsOneWidget);
     expect(find.byKey(const ValueKey('vip-badge-1')), findsNothing);
     expect(find.byKey(const ValueKey('vip-badge-2')), findsOneWidget);

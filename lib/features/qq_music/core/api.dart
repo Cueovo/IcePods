@@ -1,5 +1,6 @@
-import '../ipod_models.dart';
-import 'qq_music_models.dart';
+import '../models/account.dart';
+import '../models/auth.dart';
+import '../models/music.dart';
 
 abstract interface class QqMusicApi {
   QqMusicCredential? get credential;

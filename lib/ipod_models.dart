@@ -1,27 +1,10 @@
+import 'features/qq_music/models/music.dart';
+
 enum PlayerMode { menu, coverFlow, player, feature }
 
 enum MenuAction { submenu, feature, coverFlow, player }
 
 enum MenuSection { root, recommendations, musicHall, myMusic }
-
-enum QqMusicFeature {
-  guessRecommendations,
-  homeFeed,
-  radar,
-  newSongs,
-  recommendedPlaylists,
-  charts,
-  singers,
-  likedSongs,
-  favoriteAlbums,
-  favoriteMusicVideos,
-  favoriteSingers,
-  createdPlaylists,
-  collectedPlaylists,
-  dislikes,
-  search,
-  account,
-}
 
 class MenuEntry {
   const MenuEntry({

@@ -3,8 +3,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
+import '../features/qq_music/models/music.dart';
 import '../ipod_models.dart';
-import '../services/qq_music_models.dart';
 import '../ui_tokens.dart';
 import 'artwork_image.dart';
 

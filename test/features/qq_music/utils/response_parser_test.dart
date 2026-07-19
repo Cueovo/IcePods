@@ -1,7 +1,8 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
-import 'package:qqmusic_ipod/ipod_models.dart';
-import 'package:qqmusic_ipod/services/qq_music_models.dart';
-import 'package:qqmusic_ipod/services/qq_music_parser.dart';
+import 'package:qqmusic_ipod/features/qq_music/models/music.dart';
+import 'package:qqmusic_ipod/features/qq_music/utils/response_parser.dart';
 
 void main() {
   const parser = QqMusicResponseParser();
@@ -135,6 +136,56 @@ void main() {
     expect(items, hasLength(1));
     expect(items.single.title, '相似歌曲');
     expect(items.single.subtitle, contains('听王艳薇的也在听'));
+  });
+
+  test('container song total drives pagination across pages', () {
+    const playlist = QqMusicItem(
+      id: 'playlist-1',
+      title: '长歌单',
+      subtitle: '',
+      imageUrl: '',
+      type: QqMusicItemType.playlist,
+    );
+    final songs = List.generate(
+      25,
+      (index) => {
+        'id': index + 1,
+        'mid': 'song-mid-$index',
+        'title': '歌曲$index',
+      },
+    );
+
+    final first = parser.parseChildren(
+      playlist,
+      {'songs': songs, 'size': 25, 'total': 60},
+      limit: 25,
+      page: 1,
+    );
+    final last = parser.parseChildren(
+      playlist,
+      {'songs': songs.take(10).toList(), 'size': 10, 'total': 60},
+      limit: 25,
+      page: 3,
+    );
+
+    expect(first.items, hasLength(25));
+    expect(first.hasMore, isTrue);
+    expect(last.items, hasLength(10));
+    expect(last.hasMore, isFalse);
+  });
+
+  test('parses official lyric payload into timeline lines', () {
+    final lyrics = parser.parseLyrics({
+      'lyric': base64Encode(utf8.encode('[00:01.00]开始直接歌词\n[00:12.50]第二行')),
+    });
+
+    expect(lyrics.lines, hasLength(2));
+    expect(lyrics.lines.first.time, const Duration(seconds: 1));
+    expect(lyrics.lines.first.text, '开始直接歌词');
+    expect(
+      lyrics.lines.last.time,
+      const Duration(seconds: 12, milliseconds: 500),
+    );
   });
 
   test('parses QQ Music pay_play as the VIP playback requirement', () {

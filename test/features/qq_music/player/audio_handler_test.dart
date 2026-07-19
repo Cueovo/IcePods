@@ -1,6 +1,6 @@
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:qqmusic_ipod/services/qq_music_audio_handler.dart';
+import 'package:qqmusic_ipod/features/qq_music/player/audio_handler.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
