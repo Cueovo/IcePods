@@ -12,6 +12,7 @@ import 'package:qqmusic_ipod/features/shell/models/menu_catalog.dart';
 import 'package:qqmusic_ipod/core/theme/widgets/click_wheel.dart';
 import 'package:qqmusic_ipod/features/player/views/widgets/cover_flow_panel.dart';
 import 'package:qqmusic_ipod/features/shell/views/pages/feature_panel.dart';
+import 'package:qqmusic_ipod/features/shell/views/widgets/ipod_status_bar.dart';
 import 'package:qqmusic_ipod/features/player/views/pages/now_playing_panel.dart';
 
 import '../player/state/fake_api.dart';
@@ -688,6 +689,126 @@ void main() {
     );
   });
 
+  testWidgets('lays out the custom iOS status bar by device family', (
+    WidgetTester tester,
+  ) async {
+    Future<void> pumpStatusBar({
+      required Size size,
+      required double safeTop,
+    }) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = size;
+      tester.view.viewPadding = FakeViewPadding(top: safeTop);
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: Align(alignment: Alignment.topCenter, child: IpodStatusBar()),
+          ),
+        ),
+      );
+      await tester.pump();
+    }
+
+    addTearDown(tester.view.reset);
+
+    await pumpStatusBar(size: const Size(375, 667), safeTop: 20);
+    final classicBar = tester.getRect(
+      find.byKey(const ValueKey('ipod-status-bar')),
+    );
+    final classicTime = tester.getRect(
+      find.byKey(const ValueKey('ipod-status-time')),
+    );
+    final classicStatus = tester.getRect(
+      find.byKey(const ValueKey('ipod-status-items')),
+    );
+    expect(classicTime.center.dx, closeTo(classicBar.center.dx, .01));
+    expect(classicTime.center.dy, closeTo(10, .01));
+    expect(classicStatus.right, closeTo(359, .01));
+    expect(classicStatus.center.dy, closeTo(10, .01));
+
+    await pumpStatusBar(size: const Size(390, 844), safeTop: 47);
+    final notchTimeSlot = tester.getRect(
+      find.byKey(const ValueKey('ipod-status-leading-slot')),
+    );
+    final notchStatusSlot = tester.getRect(
+      find.byKey(const ValueKey('ipod-status-trailing-slot')),
+    );
+    final notchTime = tester.getRect(
+      find.byKey(const ValueKey('ipod-status-time')),
+    );
+    final notchStatus = tester.getRect(
+      find.byKey(const ValueKey('ipod-status-items')),
+    );
+    expect(notchTimeSlot.left, closeTo(23.985, .01));
+    expect(notchTimeSlot.right, closeTo(119.535, .01));
+    expect(notchStatusSlot.left, closeTo(270.465, .01));
+    expect(notchStatusSlot.right, closeTo(366.015, .01));
+    expect(notchTime.left, closeTo(26.52, 1));
+    expect(notchStatus.right, closeTo(366.015, 1));
+    expect(notchTime.center.dy, closeTo(23.5, .01));
+    expect(notchStatus.center.dy, closeTo(23.5, .01));
+
+    await pumpStatusBar(size: const Size(393, 852), safeTop: 59);
+    final proTimeSlot = tester.getRect(
+      find.byKey(const ValueKey('ipod-status-leading-slot')),
+    );
+    final proStatusSlot = tester.getRect(
+      find.byKey(const ValueKey('ipod-status-trailing-slot')),
+    );
+    final proTime = tester.getRect(
+      find.byKey(const ValueKey('ipod-status-time')),
+    );
+    final proStatus = tester.getRect(
+      find.byKey(const ValueKey('ipod-status-items')),
+    );
+    expect(proTimeSlot.left, closeTo(30.261, .01));
+    expect(proTimeSlot.right, closeTo(102.966, .01));
+    expect(proStatusSlot.left, closeTo(290.034, .01));
+    expect(proStatusSlot.right, closeTo(362.739, .01));
+    expect(proTime.left, closeTo(51.5, 1));
+    expect(proStatus.right, closeTo(362.739, 1));
+    expect(proTime.center.dy, closeTo(29.5, .01));
+    expect(proStatus.center.dy, closeTo(29.5, .01));
+
+    await pumpStatusBar(size: const Size(430, 932), safeTop: 59);
+    final proMaxTimeSlot = tester.getRect(
+      find.byKey(const ValueKey('ipod-status-leading-slot')),
+    );
+    final proMaxStatusSlot = tester.getRect(
+      find.byKey(const ValueKey('ipod-status-trailing-slot')),
+    );
+    final proMaxTime = tester.getRect(
+      find.byKey(const ValueKey('ipod-status-time')),
+    );
+    final proMaxStatus = tester.getRect(
+      find.byKey(const ValueKey('ipod-status-items')),
+    );
+    expect(proMaxTimeSlot.left, closeTo(33.11, .01));
+    expect(proMaxTimeSlot.right, closeTo(112.66, .01));
+    expect(proMaxStatusSlot.left, closeTo(317.34, .01));
+    expect(proMaxStatusSlot.right, closeTo(396.89, .01));
+    expect(proMaxTime.left, closeTo(56.33, 1));
+    expect(proMaxStatus.right, closeTo(396.89, 1));
+    expect(proMaxTime.right, lessThanOrEqualTo(152));
+    expect(proMaxStatus.left, greaterThanOrEqualTo(278));
+    expect(proMaxTime.center.dy, closeTo(29.5, .01));
+    expect(proMaxStatus.center.dy, closeTo(29.5, .01));
+
+    await pumpStatusBar(size: const Size(402, 874), safeTop: 59);
+    final newProTime = tester.getRect(
+      find.byKey(const ValueKey('ipod-status-time')),
+    );
+    expect(newProTime.left, closeTo(52.75, 1));
+    expect(newProTime.center.dy, closeTo(32.5, .01));
+
+    await pumpStatusBar(size: const Size(440, 956), safeTop: 62);
+    final newProMaxTime = tester.getRect(
+      find.byKey(const ValueKey('ipod-status-time')),
+    );
+    expect(newProMaxTime.left, closeTo(56.5, 1));
+    expect(newProMaxTime.center.dy, closeTo(32.5, .01));
+  });
+
   testWidgets('fills the phone viewport', (WidgetTester tester) async {
     tester.view.physicalSize = const Size(1170, 2532);
     tester.view.devicePixelRatio = 3;
@@ -747,9 +868,7 @@ void main() {
     await tapMenu(tester);
     // Back on root at 推荐 (index 2). Step previous to 封面流 (index 1).
     final wheelRect = tester.getRect(wheel);
-    await tester.tapAt(
-      wheelRect.center + Offset(-wheelRect.width * .32, 0),
-    );
+    await tester.tapAt(wheelRect.center + Offset(-wheelRect.width * .32, 0));
     await tester.pumpAndSettle();
     await tester.tap(wheel);
     await tester.pumpAndSettle();

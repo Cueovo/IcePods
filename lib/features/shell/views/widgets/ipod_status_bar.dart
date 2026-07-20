@@ -130,54 +130,105 @@ class _IpodStatusBarState extends State<IpodStatusBar> {
   Widget build(BuildContext context) {
     final time =
         '${_now.hour.toString().padLeft(2, '0')}:${_now.minute.toString().padLeft(2, '0')}';
-    final metrics = _IosStatusBarMetrics.resolve(MediaQuery.of(context));
 
     return IgnorePointer(
-      child: SizedBox(
-        height: metrics.totalHeight,
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(
-            metrics.horizontalPadding,
-            metrics.contentTop,
-            metrics.horizontalPadding,
-            0,
-          ),
-          child: Align(
-            alignment: Alignment.topCenter,
-            child: SizedBox(
-              height: metrics.contentHeight,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Text(
-                    time,
-                    style: TextStyle(
-                      color: const Color(0xE6FFFFFF),
-                      fontSize: metrics.timeSize,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: -0.2,
-                      height: 1,
-                      fontFeatures: const [FontFeature.tabularFigures()],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final metrics = _IosStatusBarMetrics.resolve(
+            MediaQuery.of(context),
+            constraints.maxWidth,
+          );
+          final timeWidget = Text(
+            time,
+            key: const ValueKey('ipod-status-time'),
+            style: TextStyle(
+              color: const Color(0xE6FFFFFF),
+              fontSize: metrics.timeSize,
+              fontWeight: FontWeight.w600,
+              letterSpacing: -0.2,
+              height: 1,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          );
+          final statusWidget = Row(
+            key: const ValueKey('ipod-status-items'),
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                _networkIcon,
+                color: _networkConnected
+                    ? const Color(0xE6FFFFFF)
+                    : const Color(0x66FFFFFF),
+                size: metrics.iconSize,
+              ),
+              SizedBox(width: metrics.itemSpacing),
+              _HorizontalBattery(level: _batteryLevel, state: _batteryState),
+            ],
+          );
+
+          final slotHeight = metrics.totalHeight;
+          final leadingContentWidth =
+              (metrics.leadingSlotLeft + metrics.leadingSlotWidth) -
+              metrics.leadingContentLeft;
+          final trailingContentWidth =
+              metrics.trailingContentRight - metrics.trailingSlotLeft;
+
+          return SizedBox(
+            key: const ValueKey('ipod-status-bar'),
+            height: slotHeight,
+            child: Stack(
+              children: [
+                Positioned(
+                  left: metrics.leadingSlotLeft,
+                  top: 0,
+                  width: metrics.leadingSlotWidth,
+                  height: slotHeight,
+                  child: SizedBox(
+                    key: const ValueKey('ipod-status-leading-slot'),
+                  ),
+                ),
+                Positioned(
+                  left: metrics.trailingSlotLeft,
+                  top: 0,
+                  width: metrics.trailingSlotWidth,
+                  height: slotHeight,
+                  child: SizedBox(
+                    key: const ValueKey('ipod-status-trailing-slot'),
+                  ),
+                ),
+                if (metrics.family == _IosStatusBarFamily.classic)
+                  Positioned(
+                    top: metrics.contentTop,
+                    left: 0,
+                    right: 0,
+                    height: metrics.contentHeight,
+                    child: Center(child: timeWidget),
+                  )
+                else
+                  Positioned(
+                    top: metrics.contentTop,
+                    left: metrics.leadingContentLeft,
+                    width: leadingContentWidth,
+                    height: metrics.contentHeight,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: timeWidget,
                     ),
                   ),
-                  const Spacer(),
-                  Icon(
-                    _networkIcon,
-                    color: _networkConnected
-                        ? const Color(0xE6FFFFFF)
-                        : const Color(0x66FFFFFF),
-                    size: metrics.iconSize,
+                Positioned(
+                  top: metrics.contentTop,
+                  left: metrics.trailingSlotLeft,
+                  width: trailingContentWidth,
+                  height: metrics.contentHeight,
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: statusWidget,
                   ),
-                  const SizedBox(width: 6),
-                  _HorizontalBattery(
-                    level: _batteryLevel,
-                    state: _batteryState,
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
@@ -194,101 +245,225 @@ class _IpodStatusBarState extends State<IpodStatusBar> {
 ///
 /// Glyphs are centered in the **status bar frame**, not the full safe area.
 /// On Dynamic Island devices the safe area is taller so content clears the
-/// island; system time/battery still live in the 54pt status-bar band.
+/// island; system glyphs remain on a separate hardware-aligned center line.
 class _IosStatusBarMetrics {
   const _IosStatusBarMetrics({
+    required this.family,
     required this.safeTop,
     required this.statusBarHeight,
-    required this.horizontalPadding,
+    required this.leadingSlotLeft,
+    required this.leadingSlotWidth,
+    required this.trailingSlotLeft,
+    required this.trailingSlotWidth,
+    required this.leadingContentLeft,
+    required this.trailingContentRight,
+    required this.contentCenterY,
     required this.contentHeight,
     required this.iconSize,
     required this.timeSize,
+    required this.itemSpacing,
     required this.bottomGap,
   });
 
+  final _IosStatusBarFamily family;
   final double safeTop;
   final double statusBarHeight;
-  final double horizontalPadding;
+  final double leadingSlotLeft;
+  final double leadingSlotWidth;
+  final double trailingSlotLeft;
+  final double trailingSlotWidth;
+  final double leadingContentLeft;
+  final double trailingContentRight;
+  final double contentCenterY;
   final double contentHeight;
   final double iconSize;
   final double timeSize;
+  final double itemSpacing;
   final double bottomGap;
 
-  /// Top padding so content is vertically centered in [statusBarHeight].
   double get contentTop =>
-      ((statusBarHeight - contentHeight) / 2).clamp(0.0, statusBarHeight);
+      (contentCenterY - contentHeight / 2).clamp(0.0, statusBarHeight);
 
-  /// Full reserved height: clear the cutout, then a little air under the bar.
   double get totalHeight => safeTop + bottomGap;
 
-  static _IosStatusBarMetrics resolve(MediaQueryData mq) {
-    // viewPadding keeps the cutout inset when system UI is immersive/hidden.
-    final rawTop = mq.viewPadding.top > 0
-        ? mq.viewPadding.top
-        : mq.padding.top;
+  static _IosStatusBarMetrics resolve(MediaQueryData mq, double width) {
+    final rawTop = mq.viewPadding.top > 0 ? mq.viewPadding.top : mq.padding.top;
+    final portrait = mq.size.height >= mq.size.width;
+    final effectiveWidth = width.isFinite && width > 0 ? width : mq.size.width;
 
-    // Desktop / web / simulators without a real inset.
-    if (rawTop <= 0) {
-      return const _IosStatusBarMetrics(
-        safeTop: 20,
-        statusBarHeight: 20,
-        horizontalPadding: 16,
-        contentHeight: 14,
-        iconSize: 12,
-        timeSize: 12,
-        bottomGap: 6,
-      );
+    // A landscape window has no top hardware cutout. Keep a compact, centered
+    // fallback rather than treating a short landscape inset as an iPhone notch.
+    if (!portrait) {
+      return _classic(effectiveWidth, safeTop: rawTop > 0 ? rawTop : 20);
     }
 
-    // Dynamic Island: safe top ≥ 54 (typically 59 or 62).
-    // Status bar frame is always 54pt; extra safe inset clears the island.
-    if (rawTop >= 54) {
-      return _IosStatusBarMetrics(
-        safeTop: rawTop,
-        statusBarHeight: 54,
-        // System status items sit in the side “ears”, ~16pt from the edge.
-        horizontalPadding: 16,
-        contentHeight: 17,
-        iconSize: 13,
-        timeSize: 12,
-        bottomGap: 8,
-      );
+    final family = _resolveFamily(mq, effectiveWidth, rawTop);
+    switch (family) {
+      case _IosStatusBarFamily.classic:
+        return _classic(effectiveWidth, safeTop: rawTop > 0 ? rawTop : 20);
+      case _IosStatusBarFamily.notch:
+        return _sideLayout(
+          family: family,
+          width: effectiveWidth,
+          safeTop: rawTop,
+          statusBarHeight: rawTop >= 46 ? 47 : rawTop.clamp(40.0, 50.0),
+          sideInset: _notchSideInset(effectiveWidth),
+          slotWidth: _notchSlotWidth(effectiveWidth),
+          leadingContentLeft: _notchTimeLeft(effectiveWidth),
+          trailingContentRight:
+              effectiveWidth - _notchRightInset(effectiveWidth),
+          contentCenterY: _notchCenterY(rawTop),
+          contentHeight: 17,
+          iconSize: 13,
+          timeSize: 12,
+          itemSpacing: 6,
+          bottomGap: 8,
+        );
+      case _IosStatusBarFamily.dynamicIsland:
+        final isNewPro = _isNewProSize(mq.size);
+        return _sideLayout(
+          family: family,
+          width: effectiveWidth,
+          safeTop: rawTop,
+          statusBarHeight: isNewPro ? 58 : 54,
+          sideInset: _dynamicIslandSideInset(effectiveWidth),
+          slotWidth: _dynamicIslandSlotWidth(effectiveWidth),
+          leadingContentLeft: _dynamicIslandTimeLeft(effectiveWidth),
+          trailingContentRight:
+              effectiveWidth - _dynamicIslandRightInset(effectiveWidth),
+          contentCenterY: isNewPro ? 32.5 : 29.5,
+          contentHeight: 17,
+          iconSize: 13,
+          timeSize: 12,
+          itemSpacing: 6,
+          bottomGap: 8,
+        );
     }
+  }
 
-    // Notch family: safe top is the status bar (44 on early X, 47 on 12–14).
-    // Center glyphs in that full band.
-    if (rawTop >= 40) {
-      return _IosStatusBarMetrics(
-        safeTop: rawTop,
-        statusBarHeight: rawTop >= 46 ? 47 : rawTop,
-        horizontalPadding: 16,
-        contentHeight: 17,
-        iconSize: 13,
-        timeSize: 12,
-        bottomGap: 8,
-      );
-    }
-
-    // Classic / SE / Android status strip (~20–32).
-    // Status bar height equals the reported top inset.
-    final bar = rawTop.clamp(20.0, 32.0);
+  static _IosStatusBarMetrics _classic(
+    double width, {
+    required double safeTop,
+  }) {
+    final bar = safeTop.clamp(20.0, 32.0);
     return _IosStatusBarMetrics(
-      safeTop: rawTop,
+      family: _IosStatusBarFamily.classic,
+      safeTop: safeTop,
       statusBarHeight: bar,
-      horizontalPadding: 16,
+      leadingSlotLeft: 0,
+      leadingSlotWidth: width / 2,
+      trailingSlotLeft: width / 2,
+      trailingSlotWidth: width / 2,
+      leadingContentLeft: 0,
+      trailingContentRight: width - 16,
+      contentCenterY: bar / 2,
       contentHeight: (bar * 0.7).clamp(12.0, 16.0),
       iconSize: 12,
       timeSize: 12,
+      itemSpacing: 6,
       bottomGap: 6,
     );
   }
+
+  static _IosStatusBarMetrics _sideLayout({
+    required _IosStatusBarFamily family,
+    required double width,
+    required double safeTop,
+    required double statusBarHeight,
+    required double sideInset,
+    required double slotWidth,
+    required double leadingContentLeft,
+    required double trailingContentRight,
+    required double contentCenterY,
+    required double contentHeight,
+    required double iconSize,
+    required double timeSize,
+    required double itemSpacing,
+    required double bottomGap,
+  }) {
+    return _IosStatusBarMetrics(
+      family: family,
+      safeTop: safeTop,
+      statusBarHeight: statusBarHeight,
+      leadingSlotLeft: sideInset,
+      leadingSlotWidth: slotWidth,
+      trailingSlotLeft: width - sideInset - slotWidth,
+      trailingSlotWidth: slotWidth,
+      leadingContentLeft: leadingContentLeft,
+      trailingContentRight: trailingContentRight,
+      contentCenterY: contentCenterY,
+      contentHeight: contentHeight,
+      iconSize: iconSize,
+      timeSize: timeSize,
+      itemSpacing: itemSpacing,
+      bottomGap: bottomGap,
+    );
+  }
+
+  static _IosStatusBarFamily _resolveFamily(
+    MediaQueryData mq,
+    double width,
+    double rawTop,
+  ) {
+    final size = mq.size;
+    if (rawTop >= 54 &&
+        (_isDynamicIslandSize(size) || rawTop >= 59 || width >= 390)) {
+      return _IosStatusBarFamily.dynamicIsland;
+    }
+    if (rawTop >= 40 && (width >= 350 || size.height >= 700)) {
+      return _IosStatusBarFamily.notch;
+    }
+    return _IosStatusBarFamily.classic;
+  }
+
+  static bool _isDynamicIslandSize(Size size) {
+    final width = size.width < size.height ? size.width : size.height;
+    return const [
+      393,
+      402,
+      420,
+      430,
+      440,
+    ].any((candidate) => (width - candidate).abs() < 1);
+  }
+
+  static bool _isNewProSize(Size size) {
+    final width = size.width < size.height ? size.width : size.height;
+    return (width - 402).abs() < 1 || (width - 440).abs() < 1;
+  }
+
+  static double _notchSideInset(double width) =>
+      (width * 0.0615).clamp(23.0, 27.0);
+
+  static double _notchTimeLeft(double width) =>
+      (width * 0.068).clamp(25.0, 29.0);
+
+  static double _notchRightInset(double width) =>
+      (width * 0.0615).clamp(23.0, 27.0);
+
+  static double _notchCenterY(double rawTop) =>
+      rawTop >= 46 ? 23.5 : rawTop / 2;
+
+  static double _notchSlotWidth(double width) =>
+      (width * 0.245).clamp(84.0, 108.0);
+
+  static double _dynamicIslandSideInset(double width) =>
+      (width * 0.077).clamp(29.0, 35.0);
+
+  static double _dynamicIslandTimeLeft(double width) =>
+      (width * 0.131).clamp(51.5, 56.5);
+
+  static double _dynamicIslandRightInset(double width) =>
+      (width * 0.077).clamp(29.0, 35.0);
+
+  static double _dynamicIslandSlotWidth(double width) =>
+      (width * 0.185).clamp(72.0, 84.0);
 }
 
+enum _IosStatusBarFamily { classic, notch, dynamicIsland }
+
 class _HorizontalBattery extends StatelessWidget {
-  const _HorizontalBattery({
-    required this.level,
-    required this.state,
-  });
+  const _HorizontalBattery({required this.level, required this.state});
 
   final int level;
   final BatteryState state;
@@ -301,10 +476,7 @@ class _HorizontalBattery extends StatelessWidget {
       width: 26,
       height: 12,
       child: CustomPaint(
-        painter: _BatteryPainter(
-          level: level,
-          charging: charging,
-        ),
+        painter: _BatteryPainter(level: level, charging: charging),
       ),
     );
   }
@@ -312,10 +484,7 @@ class _HorizontalBattery extends StatelessWidget {
 
 /// iOS-style battery: filled body + gray remainder + cutout percentage, no bolt.
 class _BatteryPainter extends CustomPainter {
-  _BatteryPainter({
-    required this.level,
-    required this.charging,
-  });
+  _BatteryPainter({required this.level, required this.charging});
 
   final int level;
   final bool charging;
