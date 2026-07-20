@@ -130,86 +130,156 @@ class _IpodStatusBarState extends State<IpodStatusBar> {
   Widget build(BuildContext context) {
     final time =
         '${_now.hour.toString().padLeft(2, '0')}:${_now.minute.toString().padLeft(2, '0')}';
-    final mq = MediaQuery.of(context);
-    // viewPadding keeps the cutout inset even when system chrome is immersive.
-    final topInset = mq.viewPadding.top > 0
-        ? mq.viewPadding.top
-        : mq.padding.top;
-    // Floor for desktop/simulators with no inset.
-    final statusBand = topInset > 0 ? topInset : 24.0;
-    final width = mq.size.width;
-
-    // iPhone cutouts (approx logical points):
-    // - Dynamic Island / large: ~54–62
-    // - Notch: ~44–50
-    // - Classic / SE: ~20
-    final isDynamicIsland = statusBand >= 54;
-    final isNotch = statusBand >= 40 && statusBand < 54;
-
-    // Side margins sit in the “ears” beside notch/island; scale with width.
-    final horizontal = isDynamicIsland
-        ? (width * 0.052).clamp(18.0, 30.0)
-        : isNotch
-        ? (width * 0.048).clamp(16.0, 28.0)
-        : (width * 0.042).clamp(14.0, 24.0);
-
-    // System status glyphs are ~12–14pt; keep a fixed content row and center it
-    // inside the status band (with a small optical bias for cutouts).
-    const contentHeight = 18.0;
-    final opticalBias = isDynamicIsland ? 1.5 : (isNotch ? 0.5 : 0.0);
-    final topPad = ((statusBand - contentHeight) / 2 + opticalBias)
-        .clamp(0.0, statusBand)
-        .toDouble();
-
-    // Space under the bar so menu content clears the status strip.
-    final bottomGap = isDynamicIsland ? 10.0 : 12.0;
-    final iconSize = isDynamicIsland ? 13.0 : 14.0;
-    final timeSize = isDynamicIsland ? 12.0 : 12.5;
+    final metrics = _IosStatusBarMetrics.resolve(MediaQuery.of(context));
 
     return IgnorePointer(
       child: SizedBox(
-        height: statusBand + bottomGap,
+        height: metrics.totalHeight,
         child: Padding(
           padding: EdgeInsets.fromLTRB(
-            horizontal,
-            topPad,
-            horizontal,
-            bottomGap,
+            metrics.horizontalPadding,
+            metrics.contentTop,
+            metrics.horizontalPadding,
+            0,
           ),
-          child: SizedBox(
-            height: contentHeight,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Text(
-                  time,
-                  style: TextStyle(
-                    color: const Color(0xE6FFFFFF),
-                    fontSize: timeSize,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.2,
-                    height: 1,
-                    fontFeatures: const [FontFeature.tabularFigures()],
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: SizedBox(
+              height: metrics.contentHeight,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Text(
+                    time,
+                    style: TextStyle(
+                      color: const Color(0xE6FFFFFF),
+                      fontSize: metrics.timeSize,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: -0.2,
+                      height: 1,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
                   ),
-                ),
-                const Spacer(),
-                Icon(
-                  _networkIcon,
-                  color: _networkConnected
-                      ? const Color(0xE6FFFFFF)
-                      : const Color(0x66FFFFFF),
-                  size: iconSize,
-                ),
-                SizedBox(width: isDynamicIsland ? 7 : 8),
-                _HorizontalBattery(
-                  level: _batteryLevel,
-                  state: _batteryState,
-                ),
-              ],
+                  const Spacer(),
+                  Icon(
+                    _networkIcon,
+                    color: _networkConnected
+                        ? const Color(0xE6FFFFFF)
+                        : const Color(0x66FFFFFF),
+                    size: metrics.iconSize,
+                  ),
+                  const SizedBox(width: 6),
+                  _HorizontalBattery(
+                    level: _batteryLevel,
+                    state: _batteryState,
+                  ),
+                ],
+              ),
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Portrait status-bar layout matching Apple UIStatusBar / safe-area metrics.
+///
+/// Sources (logical points, portrait):
+/// - Classic / SE: status bar 20, safe top 20
+/// - Notch (X–14 non-Pro): status bar 47 (early X family often 44),
+///   safe top equals status bar height
+/// - Dynamic Island (14 Pro / 15 / 16…): status bar 54,
+///   safe top 59 (most) or 62 (16 Pro / Pro Max)
+///
+/// Glyphs are centered in the **status bar frame**, not the full safe area.
+/// On Dynamic Island devices the safe area is taller so content clears the
+/// island; system time/battery still live in the 54pt status-bar band.
+class _IosStatusBarMetrics {
+  const _IosStatusBarMetrics({
+    required this.safeTop,
+    required this.statusBarHeight,
+    required this.horizontalPadding,
+    required this.contentHeight,
+    required this.iconSize,
+    required this.timeSize,
+    required this.bottomGap,
+  });
+
+  final double safeTop;
+  final double statusBarHeight;
+  final double horizontalPadding;
+  final double contentHeight;
+  final double iconSize;
+  final double timeSize;
+  final double bottomGap;
+
+  /// Top padding so content is vertically centered in [statusBarHeight].
+  double get contentTop =>
+      ((statusBarHeight - contentHeight) / 2).clamp(0.0, statusBarHeight);
+
+  /// Full reserved height: clear the cutout, then a little air under the bar.
+  double get totalHeight => safeTop + bottomGap;
+
+  static _IosStatusBarMetrics resolve(MediaQueryData mq) {
+    // viewPadding keeps the cutout inset when system UI is immersive/hidden.
+    final rawTop = mq.viewPadding.top > 0
+        ? mq.viewPadding.top
+        : mq.padding.top;
+
+    // Desktop / web / simulators without a real inset.
+    if (rawTop <= 0) {
+      return const _IosStatusBarMetrics(
+        safeTop: 20,
+        statusBarHeight: 20,
+        horizontalPadding: 16,
+        contentHeight: 14,
+        iconSize: 12,
+        timeSize: 12,
+        bottomGap: 6,
+      );
+    }
+
+    // Dynamic Island: safe top ≥ 54 (typically 59 or 62).
+    // Status bar frame is always 54pt; extra safe inset clears the island.
+    if (rawTop >= 54) {
+      return _IosStatusBarMetrics(
+        safeTop: rawTop,
+        statusBarHeight: 54,
+        // System status items sit in the side “ears”, ~16pt from the edge.
+        horizontalPadding: 16,
+        contentHeight: 17,
+        iconSize: 13,
+        timeSize: 12,
+        bottomGap: 8,
+      );
+    }
+
+    // Notch family: safe top is the status bar (44 on early X, 47 on 12–14).
+    // Center glyphs in that full band.
+    if (rawTop >= 40) {
+      return _IosStatusBarMetrics(
+        safeTop: rawTop,
+        statusBarHeight: rawTop >= 46 ? 47 : rawTop,
+        horizontalPadding: 16,
+        contentHeight: 17,
+        iconSize: 13,
+        timeSize: 12,
+        bottomGap: 8,
+      );
+    }
+
+    // Classic / SE / Android status strip (~20–32).
+    // Status bar height equals the reported top inset.
+    final bar = rawTop.clamp(20.0, 32.0);
+    return _IosStatusBarMetrics(
+      safeTop: rawTop,
+      statusBarHeight: bar,
+      horizontalPadding: 16,
+      contentHeight: (bar * 0.7).clamp(12.0, 16.0),
+      iconSize: 12,
+      timeSize: 12,
+      bottomGap: 6,
     );
   }
 }
