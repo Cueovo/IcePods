@@ -50,14 +50,80 @@ flutter analyze
 flutter test
 ```
 
-Android Release：
+## 自己安装（Android Release）
+
+适合日常在自己手机上覆盖安装。
+
+### 1. 准备
+
+- 已安装 [Flutter SDK](https://docs.flutter.dev/get-started/install)
+- 手机打开 **开发者选项 → USB 调试**
+- USB 连接电脑，允许调试
+
+检查设备：
 
 ```bash
+flutter devices
+# 或
+adb devices
+```
+
+设备状态需为 `device`（不是 `offline` / `unauthorized`）。
+
+### 2. 编译 Release APK
+
+在项目根目录：
+
+```bash
+flutter pub get
 flutter build apk --release
 ```
 
-iOS 无签名 Release：
+产物路径：
+
+```text
+build/app/outputs/flutter-apk/app-release.apk
+```
+
+### 3. 覆盖安装到手机
+
+```bash
+adb install -r build/app/outputs/flutter-apk/app-release.apk
+```
+
+多设备时指定序列号：
+
+```bash
+adb devices
+adb -s <设备序列号> install -r build/app/outputs/flutter-apk/app-release.apk
+```
+
+### 4. 一条龙（本机常用）
+
+```bash
+flutter build apk --release && adb install -r build/app/outputs/flutter-apk/app-release.apk
+E:\FlutterSDK\flutter\bin\flutter.bat build apk --release | adb install -r build/app/outputs/flutter-apk/app-release.apk
+```
+
+### 常见问题
+
+| 现象 | 处理 |
+| --- | --- |
+| `device offline` | `adb kill-server` 后 `adb start-server`，重插 USB |
+| `unauthorized` | 手机弹出授权框，点允许 |
+| 安装失败 / 签名冲突 | 先卸旧包再装：`adb uninstall com.qqmusic.ipod.qqmusic_ipod`（包名以 `android/app/src/main/AndroidManifest.xml` 为准） |
+| 找不到设备 | 换线/口，确认 USB 调试已开 |
+
+### 包信息（参考）
+
+- 应用名：Ambient Player / IcePods
+- APK：`build/app/outputs/flutter-apk/app-release.apk`
+- 约 50MB 量级（随依赖变化）
+
+## iOS 无签名 Release
 
 ```bash
 flutter build ios --release --no-codesign
 ```
+
+真机安装仍需签名（AltStore / SideStore / 开发者证书等），见上文 GitHub Actions 说明。
