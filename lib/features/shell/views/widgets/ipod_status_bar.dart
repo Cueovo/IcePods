@@ -130,34 +130,66 @@ class _IpodStatusBarState extends State<IpodStatusBar> {
   Widget build(BuildContext context) {
     final time =
         '${_now.hour.toString().padLeft(2, '0')}:${_now.minute.toString().padLeft(2, '0')}';
-    // Occupy the system status-bar strip (edge-to-edge content starts at y=0).
-    // Prefer viewPadding.top (cutout); fall back to padding.top; then a floor.
     final mq = MediaQuery.of(context);
+    // viewPadding keeps the cutout inset even when system chrome is immersive.
     final topInset = mq.viewPadding.top > 0
         ? mq.viewPadding.top
         : mq.padding.top;
-    final statusBand = topInset > 0 ? topInset : 36.0;
-    // Extra space below icons so menu/player content sits clear of the bar.
-    const bottomGap = 12.0;
+    // Floor for desktop/simulators with no inset.
+    final statusBand = topInset > 0 ? topInset : 24.0;
+    final width = mq.size.width;
+
+    // iPhone cutouts (approx logical points):
+    // - Dynamic Island / large: ~54–62
+    // - Notch: ~44–50
+    // - Classic / SE: ~20
+    final isDynamicIsland = statusBand >= 54;
+    final isNotch = statusBand >= 40 && statusBand < 54;
+
+    // Side margins sit in the “ears” beside notch/island; scale with width.
+    final horizontal = isDynamicIsland
+        ? (width * 0.052).clamp(18.0, 30.0)
+        : isNotch
+        ? (width * 0.048).clamp(16.0, 28.0)
+        : (width * 0.042).clamp(14.0, 24.0);
+
+    // System status glyphs are ~12–14pt; keep a fixed content row and center it
+    // inside the status band (with a small optical bias for cutouts).
+    const contentHeight = 18.0;
+    final opticalBias = isDynamicIsland ? 1.5 : (isNotch ? 0.5 : 0.0);
+    final topPad = ((statusBand - contentHeight) / 2 + opticalBias)
+        .clamp(0.0, statusBand)
+        .toDouble();
+
+    // Space under the bar so menu content clears the status strip.
+    final bottomGap = isDynamicIsland ? 10.0 : 12.0;
+    final iconSize = isDynamicIsland ? 13.0 : 14.0;
+    final timeSize = isDynamicIsland ? 12.0 : 12.5;
+
     return IgnorePointer(
       child: SizedBox(
         height: statusBand + bottomGap,
         child: Padding(
-          padding: EdgeInsets.fromLTRB(28, 0, 26, bottomGap),
-          child: Align(
-            // Sit near the lower edge of the system inset, above bottomGap.
-            alignment: const Alignment(0, 0.55),
+          padding: EdgeInsets.fromLTRB(
+            horizontal,
+            topPad,
+            horizontal,
+            bottomGap,
+          ),
+          child: SizedBox(
+            height: contentHeight,
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Text(
                   time,
-                  style: const TextStyle(
-                    color: Color(0xE6FFFFFF),
-                    fontSize: 12,
+                  style: TextStyle(
+                    color: const Color(0xE6FFFFFF),
+                    fontSize: timeSize,
                     fontWeight: FontWeight.w700,
-                    letterSpacing: 0.3,
+                    letterSpacing: 0.2,
                     height: 1,
-                    fontFeatures: [FontFeature.tabularFigures()],
+                    fontFeatures: const [FontFeature.tabularFigures()],
                   ),
                 ),
                 const Spacer(),
@@ -166,9 +198,9 @@ class _IpodStatusBarState extends State<IpodStatusBar> {
                   color: _networkConnected
                       ? const Color(0xE6FFFFFF)
                       : const Color(0x66FFFFFF),
-                  size: 14,
+                  size: iconSize,
                 ),
-                const SizedBox(width: 8),
+                SizedBox(width: isDynamicIsland ? 7 : 8),
                 _HorizontalBattery(
                   level: _batteryLevel,
                   state: _batteryState,
@@ -196,8 +228,8 @@ class _HorizontalBattery extends StatelessWidget {
     // Only active charging is green. Full/discharging stay white (or red if low).
     final charging = state == BatteryState.charging;
     return SizedBox(
-      width: 28,
-      height: 13,
+      width: 26,
+      height: 12,
       child: CustomPaint(
         painter: _BatteryPainter(
           level: level,
