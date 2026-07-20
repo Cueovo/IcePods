@@ -1,4 +1,4 @@
-import 'dart:ui';
+﻿import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
@@ -59,7 +59,7 @@ class _HomePanelState extends State<HomePanel> {
     } else if (itemBottom > viewBottom - 4) {
       target = itemBottom - position.viewportDimension;
     } else {
-      // Already fully visible — no need to scroll.
+      // Already fully visible 鈥?no need to scroll.
       return;
     }
 
@@ -140,15 +140,10 @@ class _HomePanelState extends State<HomePanel> {
 }
 
 class _MenuTile extends StatelessWidget {
-  const _MenuTile({
-    required this.entry,
-    required this.selected,
-    this.borderRadius = const BorderRadius.all(Radius.circular(_menuTileRadius)),
-  });
+  const _MenuTile({required this.entry, required this.selected});
 
   final MenuEntry entry;
   final bool selected;
-  final BorderRadius borderRadius;
 
   @override
   Widget build(BuildContext context) {
@@ -160,7 +155,7 @@ class _MenuTile extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
         color: selected ? const Color(0x26FFFFFF) : Colors.transparent,
-        borderRadius: borderRadius,
+        borderRadius: BorderRadius.circular(15),
         border: Border.all(
           color: selected ? const Color(0x33FFFFFF) : Colors.transparent,
         ),
@@ -279,7 +274,7 @@ class _PreviewCard extends StatelessWidget {
                     filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
                     child: const ColoredBox(color: Color(0x1AFFFFFF)),
                   ),
-                  // Soft accent wash — not a solid opaque panel.
+                  // Soft accent wash 鈥?not a solid opaque panel.
                   DecoratedBox(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
@@ -315,7 +310,7 @@ class _PreviewCard extends StatelessWidget {
                       child: Icon(icon, size: 40, color: Colors.white),
                     ),
                   ),
-                  // Bottom readability only — keep top open to ambient.
+                  // Bottom readability only 鈥?keep top open to ambient.
                   const DecoratedBox(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
