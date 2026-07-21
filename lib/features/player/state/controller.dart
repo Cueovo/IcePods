@@ -739,7 +739,7 @@ class QqMusicController extends ChangeNotifier {
         return false;
       }
       if (isUnavailable(item)) {
-        _playbackError = '歌曲没有可用播放地址，可能需要会员或存在版权限制';
+        _playbackError = _unavailableSongMessage(item);
         notifyListeners();
         return false;
       }
@@ -827,7 +827,7 @@ class QqMusicController extends ChangeNotifier {
       return false;
     }
     if (isUnavailable(song)) {
-      _playbackError = '歌曲没有可用播放地址，可能需要会员或存在版权限制';
+      _playbackError = _unavailableSongMessage(song);
       notifyListeners();
       return false;
     }
@@ -838,7 +838,10 @@ class QqMusicController extends ChangeNotifier {
     try {
       final prefetchedUrl = await _takePrefetchedPlayableUrl(song);
       if (prefetchedUrl == null && isUnavailable(song)) {
-        throw const QqMusicApiException('歌曲没有可用播放地址，可能需要会员或存在版权限制');
+        throw QqMusicApiException(
+          _unavailableSongMessage(song),
+          code: 104003,
+        );
       }
       final url = prefetchedUrl ?? await api.getPlayableUrl(song);
       _unavailableSongKeys.remove(_songKey(song));
@@ -869,10 +872,8 @@ class QqMusicController extends ChangeNotifier {
     } catch (error) {
       if (_isUnavailablePlaybackError(error)) {
         _markUnavailable(song);
-        _playbackError = '歌曲没有可用播放地址，可能需要会员或存在版权限制';
-      } else {
-        _playbackError = _message(error);
       }
+      _playbackError = _playbackFailureMessage(error, song: song);
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -1127,10 +1128,8 @@ class QqMusicController extends ChangeNotifier {
       if (_sameSong(song, _currentSong)) {
         if (_isUnavailablePlaybackError(error)) {
           _markUnavailable(song);
-          _playbackError = '歌曲没有可用播放地址，可能需要会员或存在版权限制';
-        } else {
-          _playbackError = _message(error);
         }
+        _playbackError = _playbackFailureMessage(error, song: song);
       }
     } finally {
       _loadingAudioSource = false;
@@ -1172,14 +1171,72 @@ class QqMusicController extends ChangeNotifier {
     }
   }
 
+  /// Prefer specific reasons when a probe already marked the song unplayable.
+  String _unavailableSongMessage(QqMusicItem song) {
+    if (song.requiresVip) {
+      return '该歌曲需要 VIP 会员才能播放';
+    }
+    if (song.isCopyrightRestricted) {
+      return '歌曲暂无版权';
+    }
+    if (!api.isLoggedIn) {
+      return '当前未登录，该歌曲暂无游客播放地址';
+    }
+    return '歌曲没有可用播放地址，可能需要会员或存在版权限制';
+  }
+
   bool _isUnavailablePlaybackError(Object error) {
     if (error is! QqMusicApiException) {
       return false;
     }
+    // Guest failures are often temporary (login may unlock the song).
+    // Only mark "无音源" after a confirmed logged-in probe/play path.
+    if (!api.isLoggedIn) {
+      return false;
+    }
+    // Session expiry is temporary; user can re-login.
+    if (error.isUnauthorized) {
+      return false;
+    }
+    if (error.code == 104003) {
+      return true;
+    }
     final message = error.message;
     return message.contains('没有可用播放地址') ||
         message.contains('缺少 MID') ||
+        message.contains('暂无版权') ||
+        message.contains('VIP 会员') ||
         message.contains('版权限制');
+  }
+
+  /// Map API / playback failures to distinct user-facing copy.
+  String _playbackFailureMessage(Object error, {QqMusicItem? song}) {
+    if (error is QqMusicApiException) {
+      // Only treat auth codes as "session expired" when we actually had a login.
+      // Guest requests can also get 1000/104401; that is not a local login bug.
+      if (error.isUnauthorized && api.isLoggedIn) {
+        return 'QQ 音乐登录已失效，请重新扫码登录';
+      }
+      if (error.isUnauthorized ||
+          error.code == 104003 ||
+          error.message.contains('没有可用播放地址') ||
+          error.message.contains('游客播放地址')) {
+        if (song?.requiresVip == true || error.message.contains('VIP')) {
+          return '该歌曲需要 VIP 会员才能播放';
+        }
+        if (song?.isCopyrightRestricted == true ||
+            error.message.contains('暂无版权')) {
+          return '歌曲暂无版权';
+        }
+        if (!api.isLoggedIn) {
+          return '当前未登录，该歌曲暂无游客播放地址';
+        }
+        return '歌曲没有可用播放地址，可能需要会员或存在版权限制';
+      }
+      // Keep specific API messages (VIP / copyright / login prompts) as-is.
+      return error.message;
+    }
+    return _message(error);
   }
 
   Future<void> _handlePlaybackCompleted() async {
@@ -1394,6 +1451,42 @@ class QqMusicController extends ChangeNotifier {
     }
   }
 
+  /// Call when the app returns to foreground so QR login can finish after scan.
+  void onAppResumed() {
+    final activeQr = _qrCode;
+    if (activeQr == null || api.isLoggedIn) {
+      return;
+    }
+    final status = _qrStatus;
+    if (status != null &&
+        (status.done ||
+            status.event == 3 ||
+            status.event == 4 ||
+            status.event == -1)) {
+      return;
+    }
+    // Leaving the app (to scan in QQ) often produces a one-shot DNS failure;
+    // recover the login UI and keep polling instead of stranding on _error.
+    var changed = false;
+    if (_error.isNotEmpty && _isTransientQrNetworkError(_error)) {
+      _error = '';
+      changed = true;
+    }
+    if (_statusMessage.contains('网络暂时') ||
+        _statusMessage.contains('Failed host lookup') ||
+        _statusMessage.contains('failed host lookup')) {
+      _statusMessage = '已回到应用，正在继续检测登录…';
+      changed = true;
+    }
+    if (_qrPollTimer == null) {
+      _startQrPolling();
+    }
+    if (changed) {
+      notifyListeners();
+    }
+    unawaited(_pollQr());
+  }
+
   Future<void> logout() async {
     _stopQrPolling();
     await api.logout();
@@ -1576,6 +1669,14 @@ class QqMusicController extends ChangeNotifier {
     try {
       final status = await api.checkQrStatus(activeQr);
       _qrStatus = status;
+      // A successful poll means the login network is fine again.
+      if (_error.isNotEmpty && _isTransientQrNetworkError(_error)) {
+        _error = '';
+      }
+      if (_statusMessage.contains('网络暂时') ||
+          _statusMessage.contains('已回到应用')) {
+        _statusMessage = '';
+      }
       if (status.done && api.isLoggedIn) {
         _stopQrPolling();
         await _loadProfile();
@@ -1583,8 +1684,16 @@ class QqMusicController extends ChangeNotifier {
         _stopQrPolling();
       }
     } catch (error) {
-      _error = _message(error);
-      _stopQrPolling();
+      final message = _message(error);
+      if (_isTransientQrNetworkError(message)) {
+        // Background / app-switch DNS blips are expected while the user is in QQ.
+        // Keep the QR session and timer; do not push a fatal error that replaces
+        // the login UI.
+        _statusMessage = '网络暂时不可用，返回应用后将自动继续检测登录';
+      } else {
+        _error = message;
+        _stopQrPolling();
+      }
     } finally {
       _pollingQr = false;
       notifyListeners();
@@ -1594,6 +1703,22 @@ class QqMusicController extends ChangeNotifier {
   void _stopQrPolling() {
     _qrPollTimer?.cancel();
     _qrPollTimer = null;
+  }
+
+  bool _isTransientQrNetworkError(Object error) {
+    final message = error is String ? error : _message(error);
+    final lower = message.toLowerCase();
+    return lower.contains('failed host lookup') ||
+        lower.contains('socketexception') ||
+        lower.contains('connection refused') ||
+        lower.contains('connection reset') ||
+        lower.contains('connection closed') ||
+        lower.contains('network is unreachable') ||
+        lower.contains('software caused connection abort') ||
+        lower.contains('timed out') ||
+        lower.contains('timeout') ||
+        message.contains('无法连接 QQ 音乐登录服务') ||
+        message.contains('无法连接 QQ 音乐');
   }
 
   bool _shouldBlockVipPlayback(QqMusicItem song) =>

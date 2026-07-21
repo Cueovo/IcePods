@@ -5,7 +5,12 @@ class QqMusicApiException implements Exception {
   final int? statusCode;
   final int? code;
 
-  bool get isUnauthorized => statusCode == 401;
+  /// True login / session failures (not VIP, copyright, or missing guest URL).
+  bool get isUnauthorized =>
+      statusCode == 401 ||
+      code == 1000 ||
+      code == 104400 ||
+      code == 104401;
 
   @override
   String toString() => message;

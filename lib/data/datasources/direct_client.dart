@@ -293,8 +293,9 @@ int _int(Object? value) =>
     value is num ? value.toInt() : int.tryParse('$value') ?? 0;
 
 String _cgiErrorMessage(int code) => switch (code) {
-  1000 || 104400 || 104401 => 'QQ 音乐登录凭据已失效',
+  1000 || 104400 || 104401 => 'QQ 音乐登录已失效，请重新扫码登录',
   2000 => 'QQ 音乐请求需要签名',
   2001 => 'QQ 音乐请求过于频繁',
+  104003 => '歌曲没有可用播放地址，可能需要会员或存在版权限制',
   _ => 'QQ 音乐业务请求失败 ($code)',
 };

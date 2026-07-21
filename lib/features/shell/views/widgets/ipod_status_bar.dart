@@ -138,14 +138,15 @@ class _IpodStatusBarState extends State<IpodStatusBar> {
             MediaQuery.of(context),
             constraints.maxWidth,
           );
+          // Larger clock with a slightly heavier weight so it holds against ambient.
           final timeWidget = Text(
             time,
             key: const ValueKey('ipod-status-time'),
             style: TextStyle(
-              color: const Color(0xE6FFFFFF),
+              color: const Color(0xF2FFFFFF),
               fontSize: metrics.timeSize,
               fontWeight: FontWeight.w600,
-              letterSpacing: -0.2,
+              letterSpacing: 0.2,
               height: 1,
               fontFeatures: const [FontFeature.tabularFigures()],
             ),
@@ -157,12 +158,17 @@ class _IpodStatusBarState extends State<IpodStatusBar> {
               Icon(
                 _networkIcon,
                 color: _networkConnected
-                    ? const Color(0xE6FFFFFF)
+                    ? const Color(0xF2FFFFFF)
                     : const Color(0x66FFFFFF),
                 size: metrics.iconSize,
               ),
               SizedBox(width: metrics.itemSpacing),
-              _HorizontalBattery(level: _batteryLevel, state: _batteryState),
+              _HorizontalBattery(
+                level: _batteryLevel,
+                state: _batteryState,
+                width: metrics.batteryWidth,
+                height: metrics.batteryHeight,
+              ),
             ],
           );
 
@@ -196,25 +202,20 @@ class _IpodStatusBarState extends State<IpodStatusBar> {
                     key: const ValueKey('ipod-status-trailing-slot'),
                   ),
                 ),
-                if (metrics.family == _IosStatusBarFamily.classic)
-                  Positioned(
-                    top: metrics.contentTop,
-                    left: 0,
-                    right: 0,
-                    height: metrics.contentHeight,
-                    child: Center(child: timeWidget),
-                  )
-                else
-                  Positioned(
-                    top: metrics.contentTop,
-                    left: metrics.leadingContentLeft,
-                    width: leadingContentWidth,
-                    height: metrics.contentHeight,
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: timeWidget,
-                    ),
+                // All device families (classic / notch / Dynamic Island / Android
+                // fallback) keep time leading-left and status trailing-right —
+                // never centered. Classic SE used a centered clock historically,
+                // but this shell always mimics modern iPhone status chrome.
+                Positioned(
+                  top: metrics.contentTop,
+                  left: metrics.leadingContentLeft,
+                  width: leadingContentWidth,
+                  height: metrics.contentHeight,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: timeWidget,
                   ),
+                ),
                 Positioned(
                   top: metrics.contentTop,
                   left: metrics.trailingSlotLeft,
@@ -261,6 +262,8 @@ class _IosStatusBarMetrics {
     required this.contentHeight,
     required this.iconSize,
     required this.timeSize,
+    required this.batteryWidth,
+    required this.batteryHeight,
     required this.itemSpacing,
     required this.bottomGap,
   });
@@ -278,6 +281,8 @@ class _IosStatusBarMetrics {
   final double contentHeight;
   final double iconSize;
   final double timeSize;
+  final double batteryWidth;
+  final double batteryHeight;
   final double itemSpacing;
   final double bottomGap;
 
@@ -291,8 +296,7 @@ class _IosStatusBarMetrics {
     final portrait = mq.size.height >= mq.size.width;
     final effectiveWidth = width.isFinite && width > 0 ? width : mq.size.width;
 
-    // A landscape window has no top hardware cutout. Keep a compact, centered
-    // fallback rather than treating a short landscape inset as an iPhone notch.
+    // Landscape: compact leading/trailing layout (no top cutout hardware).
     if (!portrait) {
       return _classic(effectiveWidth, safeTop: rawTop > 0 ? rawTop : 20);
     }
@@ -313,11 +317,13 @@ class _IosStatusBarMetrics {
           trailingContentRight:
               effectiveWidth - _notchRightInset(effectiveWidth),
           contentCenterY: _notchCenterY(rawTop),
-          contentHeight: 17,
-          iconSize: 13,
-          timeSize: 12,
-          itemSpacing: 6,
-          bottomGap: 8,
+          contentHeight: 20,
+          iconSize: 15,
+          timeSize: 16,
+          batteryWidth: 32,
+          batteryHeight: 15,
+          itemSpacing: 7,
+          bottomGap: 14,
         );
       case _IosStatusBarFamily.dynamicIsland:
         final isNewPro = _isNewProSize(mq.size);
@@ -332,11 +338,13 @@ class _IosStatusBarMetrics {
           trailingContentRight:
               effectiveWidth - _dynamicIslandRightInset(effectiveWidth),
           contentCenterY: isNewPro ? 32.5 : 29.5,
-          contentHeight: 17,
-          iconSize: 13,
-          timeSize: 12,
-          itemSpacing: 6,
-          bottomGap: 8,
+          contentHeight: 20,
+          iconSize: 15,
+          timeSize: 16,
+          batteryWidth: 32,
+          batteryHeight: 15,
+          itemSpacing: 7,
+          bottomGap: 14,
         );
     }
   }
@@ -345,23 +353,32 @@ class _IosStatusBarMetrics {
     double width, {
     required double safeTop,
   }) {
-    final bar = safeTop.clamp(20.0, 32.0);
+    // Android / SE / landscape fallback. Time stays left-aligned so it never
+    // looks "stuck in the middle" on non-iOS viewports (common Android tops
+    // are 24–32 logical px and used to hit this path).
+    final bar = safeTop > 0 ? safeTop.clamp(20.0, 36.0) : 24.0;
+    final timeLeft = (width * 0.048).clamp(16.0, 22.0);
+    final rightInset = (width * 0.042).clamp(14.0, 18.0);
+    final slotWidth = (width * 0.28).clamp(96.0, 130.0);
+    final sideInset = timeLeft;
     return _IosStatusBarMetrics(
       family: _IosStatusBarFamily.classic,
-      safeTop: safeTop,
+      safeTop: safeTop > 0 ? safeTop : bar,
       statusBarHeight: bar,
-      leadingSlotLeft: 0,
-      leadingSlotWidth: width / 2,
-      trailingSlotLeft: width / 2,
-      trailingSlotWidth: width / 2,
-      leadingContentLeft: 0,
-      trailingContentRight: width - 16,
+      leadingSlotLeft: sideInset,
+      leadingSlotWidth: slotWidth,
+      trailingSlotLeft: width - sideInset - slotWidth,
+      trailingSlotWidth: slotWidth,
+      leadingContentLeft: timeLeft,
+      trailingContentRight: width - rightInset,
       contentCenterY: bar / 2,
-      contentHeight: (bar * 0.7).clamp(12.0, 16.0),
-      iconSize: 12,
-      timeSize: 12,
+      contentHeight: (bar * 0.72).clamp(14.0, 18.0),
+      iconSize: 14,
+      timeSize: 15,
+      batteryWidth: 30,
+      batteryHeight: 14,
       itemSpacing: 6,
-      bottomGap: 6,
+      bottomGap: 12,
     );
   }
 
@@ -378,6 +395,8 @@ class _IosStatusBarMetrics {
     required double contentHeight,
     required double iconSize,
     required double timeSize,
+    required double batteryWidth,
+    required double batteryHeight,
     required double itemSpacing,
     required double bottomGap,
   }) {
@@ -395,6 +414,8 @@ class _IosStatusBarMetrics {
       contentHeight: contentHeight,
       iconSize: iconSize,
       timeSize: timeSize,
+      batteryWidth: batteryWidth,
+      batteryHeight: batteryHeight,
       itemSpacing: itemSpacing,
       bottomGap: bottomGap,
     );
@@ -463,18 +484,25 @@ class _IosStatusBarMetrics {
 enum _IosStatusBarFamily { classic, notch, dynamicIsland }
 
 class _HorizontalBattery extends StatelessWidget {
-  const _HorizontalBattery({required this.level, required this.state});
+  const _HorizontalBattery({
+    required this.level,
+    required this.state,
+    required this.width,
+    required this.height,
+  });
 
   final int level;
   final BatteryState state;
+  final double width;
+  final double height;
 
   @override
   Widget build(BuildContext context) {
     // Only active charging is green. Full/discharging stay white (or red if low).
     final charging = state == BatteryState.charging;
     return SizedBox(
-      width: 26,
-      height: 12,
+      width: width,
+      height: height,
       child: CustomPaint(
         painter: _BatteryPainter(level: level, charging: charging),
       ),
@@ -550,10 +578,10 @@ class _BatteryPainter extends CustomPainter {
         text: '$level',
         style: TextStyle(
           foreground: Paint()..blendMode = BlendMode.dstOut,
-          fontSize: bodyHeight * 0.78,
+          fontSize: bodyHeight * 0.72,
           fontWeight: FontWeight.w800,
           height: 1,
-          letterSpacing: -0.6,
+          letterSpacing: -0.4,
           fontFeatures: const [FontFeature.tabularFigures()],
         ),
       ),

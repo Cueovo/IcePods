@@ -189,7 +189,7 @@ void main() {
       expect(controller.currentSong, isNull);
       expect(controller.items, FakeQqMusicApi.songs);
       expect(controller.error, isEmpty);
-      expect(controller.playbackError, '歌曲没有可用播放地址，可能需要会员或存在版权限制');
+      expect(controller.playbackError, '当前未登录，该歌曲暂无游客播放地址');
       expect(loadedSongs, isEmpty);
     },
   );
@@ -531,10 +531,95 @@ void main() {
     expect(await controller.activateSelected(), isFalse);
 
     expect(controller.currentSong, isNull);
-    expect(controller.playbackError, '歌曲没有可用播放地址，可能需要会员或存在版权限制');
+    expect(controller.playbackError, '该歌曲需要 VIP 会员才能播放');
     expect(api.playableUrlRequestMids, contains(FakeQqMusicApi.songs[1].mid));
     expect(loadedSongs, isEmpty);
   });
+
+  test(
+    'guest auth-style URL errors are not shown as login state anomalies',
+    () async {
+      await controller.openFeature(likedSongsEntry);
+      api.unauthorizedMids.add(FakeQqMusicApi.songs.first.mid);
+
+      expect(await controller.activateSelected(), isFalse);
+
+      expect(controller.isLoggedIn, isFalse);
+      expect(controller.currentSong, isNull);
+      expect(controller.playbackError, '当前未登录，该歌曲暂无游客播放地址');
+      expect(controller.playbackError, isNot(contains('登录状态异常')));
+      expect(controller.isUnavailable(FakeQqMusicApi.songs.first), isFalse);
+      expect(loadedSongs, isEmpty);
+    },
+  );
+
+  test('guest missing playable URL does not mark the song as 无音源', () async {
+    await controller.openFeature(likedSongsEntry);
+    api.unavailableMids.add(FakeQqMusicApi.songs.first.mid);
+
+    expect(await controller.activateSelected(), isFalse);
+
+    expect(controller.isLoggedIn, isFalse);
+    expect(controller.playbackError, '当前未登录，该歌曲暂无游客播放地址');
+    expect(controller.isUnavailable(FakeQqMusicApi.songs.first), isFalse);
+    expect(loadedSongs, isEmpty);
+  });
+
+  test(
+    'logged-in session expiry keeps a re-login message on play failure',
+    () async {
+      api.storedCredential = const QqMusicCredential(
+        musicId: '10001',
+        musicKey: 'music-key',
+      );
+      await controller.initialize();
+      await controller.openFeature(likedSongsEntry);
+      api.unauthorizedMids.add(FakeQqMusicApi.songs.first.mid);
+
+      expect(await controller.activateSelected(), isFalse);
+
+      expect(controller.isLoggedIn, isTrue);
+      expect(controller.playbackError, 'QQ 音乐登录已失效，请重新扫码登录');
+      expect(loadedSongs, isEmpty);
+    },
+  );
+
+  test('onAppResumed rechecks QR status after returning from scan', () async {
+    await controller.startQrLogin(loginType: 'qq');
+    final checksBefore = api.qrStatusChecks;
+
+    controller.onAppResumed();
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(api.qrStatusChecks, greaterThan(checksBefore));
+  });
+
+  test(
+    'transient QR network errors while away from app do not kill the session',
+    () async {
+      await controller.startQrLogin(loginType: 'qq');
+      api.qrStatusError = const QqMusicApiException(
+        '无法连接 QQ 音乐登录服务：Failed host lookup: ssl.ptlogin2.qq.com',
+      );
+
+      controller.onAppResumed();
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(controller.error, isEmpty);
+      expect(controller.qrCode, isNotNull);
+      expect(controller.statusMessage, contains('网络暂时'));
+
+      api.qrStatusError = null;
+      controller.onAppResumed();
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(controller.error, isEmpty);
+      expect(controller.qrStatus?.event, 1);
+    },
+  );
 
   test('song containers append the next page near the end', () async {
     const playlistsEntry = MenuEntry(
@@ -663,6 +748,7 @@ void main() {
 
 class _PlaybackFakeApi extends FakeQqMusicApi {
   final Set<String> unavailableMids = {};
+  final Set<String> unauthorizedMids = {};
   final List<String> playableUrlRequestMids = [];
   final List<List<String>> playableUrlProbeBatches = [];
 
@@ -680,8 +766,14 @@ class _PlaybackFakeApi extends FakeQqMusicApi {
   @override
   Future<Uri> getPlayableUrl(QqMusicItem song, {int fileType = 13}) async {
     playableUrlRequestMids.add(song.mid);
+    if (unauthorizedMids.contains(song.mid)) {
+      throw const QqMusicApiException(
+        'QQ 音乐登录已失效，请重新扫码登录',
+        code: 104401,
+      );
+    }
     if (unavailableMids.contains(song.mid)) {
-      throw const QqMusicApiException('歌曲没有可用播放地址');
+      throw const QqMusicApiException('歌曲没有可用播放地址', code: 104003);
     }
     return Uri.parse('https://example.com/${song.mid}.mp3');
   }

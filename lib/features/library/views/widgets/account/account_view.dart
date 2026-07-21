@@ -179,6 +179,18 @@ class AccountView extends StatelessWidget {
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
+                              if (controller.statusMessage.isNotEmpty) ...[
+                                const SizedBox(height: 10),
+                                Text(
+                                  controller.statusMessage,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    color: Color(0xB3FFFFFF),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ),

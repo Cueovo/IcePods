@@ -15,6 +15,7 @@ import 'package:qqmusic_ipod/features/shell/state/shell_controller.dart';
 import 'package:qqmusic_ipod/features/shell/views/pages/feature_panel.dart';
 import 'package:qqmusic_ipod/features/shell/views/widgets/ambient_background.dart'
     if (dart.library.js_interop) 'package:qqmusic_ipod/features/shell/views/widgets/ambient_background_web.dart';
+import 'package:qqmusic_ipod/features/shell/views/widgets/chassis_insets.dart';
 import 'package:qqmusic_ipod/features/shell/views/widgets/home_panel.dart';
 import 'package:qqmusic_ipod/features/shell/views/widgets/ipod_status_bar.dart';
 
@@ -57,6 +58,7 @@ class _IpodScreenState extends State<IpodScreen> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _hideSystemStatusBar();
+      _shell.music.onAppResumed();
     }
   }
 
@@ -106,12 +108,30 @@ class _IpodShellView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
-    // Flush to the top edge; keep bottom corners rounded.
-    final radius = BorderRadius.only(
-      topLeft: Radius.zero,
-      topRight: Radius.zero,
-      bottomLeft: Radius.circular(theme.screenRadius),
-      bottomRight: Radius.circular(theme.screenRadius),
+    // Outer / bezel adapt so punch-holes sit inside the top bezel band.
+    final chassisInsets = ChassisInsets.resolve(media);
+    // Framed display with iOS continuous-corner (superellipse) curvature —
+    // same radius on all four corners for a uniform glass panel.
+    final r = theme.screenBottomRadius;
+    final outerRadius = BorderRadius.circular(r);
+    // Dual frame: thin highlight strokes + a wider bezel band between them
+    // (the gap is what reads as "thicker border", not the stroke width).
+    final frame = ChassisFrameColors.fromChassis(shell.chassisColor);
+    const outerRimWidth = 1.0;
+    const glassRimWidth = 1.0;
+    final bezelPadding = chassisInsets.bezelPadding;
+    // Corner radius follows side/bottom bezel only — never the tall top band
+    // used to wrap a camera hole (that would collapse the glass clip).
+    final glassRadius = _insetBorderRadius(
+      outerRadius,
+      outerRimWidth + chassisInsets.bezelRadiusInset,
+    );
+    // Glass already cleared part of the cutout via the top bezel; residual
+    // top padding prevents the status bar from double-reserving safeTop.
+    final residualTop = chassisInsets.residualTopInset();
+    final glassMedia = media.copyWith(
+      padding: media.padding.copyWith(top: residualTop),
+      viewPadding: media.viewPadding.copyWith(top: residualTop),
     );
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: const SystemUiOverlayStyle(
@@ -129,8 +149,9 @@ class _IpodShellView extends StatelessWidget {
         key: const ValueKey('fullscreen-player'),
         color: shell.chassisColor,
         child: Padding(
+          // Bottom keeps home-indicator safe area; top is cutout-aware.
           padding: EdgeInsets.only(
-            top: 0,
+            top: chassisInsets.topOuter,
             bottom: media.padding.bottom,
             left: 0,
             right: 0,
@@ -139,75 +160,120 @@ class _IpodShellView extends StatelessWidget {
             children: [
               Expanded(
                 flex: 56,
-                child: ClipRRect(
-                  borderRadius: radius,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      // Ambient / glow only inside the screen.
-                      if (shell.mode == PlayerMode.feature)
-                        DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: RadialGradient(
-                              center: const Alignment(-.55, -.7),
-                              radius: 1.25,
-                              colors: [
-                                theme.featureGlow,
-                                theme.scaffoldBackground,
-                              ],
+                child: Padding(
+                  // Inset on all sides so continuous corners + dual bezel sit on chassis.
+                  // Top scales down on notch/island (status bar already tall inside).
+                  padding: chassisInsets.screenFramePadding,
+                  child: DecoratedBox(
+                    key: const ValueKey('ipod-screen-frame'),
+                    decoration: ShapeDecoration(
+                      // Bezel fill darker than chassis; outer rim is a highlight.
+                      color: frame.bezel,
+                      shape: RoundedSuperellipseBorder(
+                        borderRadius: outerRadius,
+                        side: BorderSide(
+                          color: frame.outerRim,
+                          width: outerRimWidth,
+                        ),
+                      ),
+                    ),
+                    child: Padding(
+                      // Thicker top bezel only when insets request it; sides stay even.
+                      padding: bezelPadding,
+                      child: DecoratedBox(
+                        key: const ValueKey('ipod-screen-glass'),
+                        decoration: ShapeDecoration(
+                          shape: RoundedSuperellipseBorder(
+                            borderRadius: glassRadius,
+                            side: BorderSide(
+                              color: frame.innerRim,
+                              width: glassRimWidth,
                             ),
                           ),
-                        )
-                      else
-                        AmbientBackground(imageUrl: shell.ambientImageUrl),
-                      // Continuous ambient wash — keep top nearly clear so status bar
-                      // doesn't sit on a different color band.
-                      const DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Color(0x00000000),
-                              Color(0x18000000),
-                              Color(0x55000000),
-                              Color(0x99000000),
-                            ],
-                            stops: [0, .28, .68, 1],
+                        ),
+                        child: ClipRSuperellipse(
+                          borderRadius: glassRadius,
+                          child: MediaQuery(
+                            data: glassMedia,
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                // Ambient / glow only inside the screen.
+                                if (shell.mode == PlayerMode.feature)
+                                  DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      gradient: RadialGradient(
+                                        center: const Alignment(-.55, -.7),
+                                        radius: 1.25,
+                                        colors: [
+                                          theme.featureGlow,
+                                          theme.scaffoldBackground,
+                                        ],
+                                      ),
+                                    ),
+                                  )
+                                else
+                                  AmbientBackground(
+                                    imageUrl: shell.ambientImageUrl,
+                                  ),
+                                // Soft mid-screen dim only — fade out before the
+                                // bottom so the frame edge stays crisp.
+                                const DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topCenter,
+                                      end: Alignment.bottomCenter,
+                                      colors: [
+                                        Color(0x00000000),
+                                        Color(0x14000000),
+                                        Color(0x2E000000),
+                                        Color(0x00000000),
+                                      ],
+                                      stops: [0, .32, .62, 1],
+                                    ),
+                                  ),
+                                ),
+                                Column(
+                                  children: [
+                                    if (chassisInsets.glassContentTop > 0)
+                                      SizedBox(
+                                        height: chassisInsets.glassContentTop,
+                                      ),
+                                    const IpodStatusBar(),
+                                    Expanded(
+                                      child: PageView(
+                                        key: const ValueKey('display-section'),
+                                        controller: shell.pageController,
+                                        physics:
+                                            const NeverScrollableScrollPhysics(),
+                                        children: [
+                                          HomePanel(
+                                            page: shell.currentMenuPage,
+                                            selectedIndex: shell.menuIndex,
+                                          ),
+                                          CoverFlowPanel(
+                                            selectedIndex: shell.coverIndex,
+                                            albums: shell.coverAlbums,
+                                          ),
+                                          _NowPlayingHost(shell: shell),
+                                          if (shell.activeFeature != null)
+                                            FeaturePanel(
+                                              entry: shell.activeFeature!,
+                                              controller: shell.music,
+                                            )
+                                          else
+                                            const SizedBox.shrink(),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                      Column(
-                        children: [
-                          const IpodStatusBar(),
-                          Expanded(
-                            child: PageView(
-                              key: const ValueKey('display-section'),
-                              controller: shell.pageController,
-                              physics: const NeverScrollableScrollPhysics(),
-                              children: [
-                                HomePanel(
-                                  page: shell.currentMenuPage,
-                                  selectedIndex: shell.menuIndex,
-                                ),
-                                CoverFlowPanel(
-                                  selectedIndex: shell.coverIndex,
-                                  albums: shell.coverAlbums,
-                                ),
-                                _NowPlayingHost(shell: shell),
-                                if (shell.activeFeature != null)
-                                  FeaturePanel(
-                                    entry: shell.activeFeature!,
-                                    controller: shell.music,
-                                  )
-                                else
-                                  const SizedBox.shrink(),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ),
@@ -238,6 +304,22 @@ class _IpodShellView extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Shrinks each corner of [radius] by [inset] for concentric nested frames.
+BorderRadius _insetBorderRadius(BorderRadius radius, double inset) {
+  Radius shrink(Radius r) {
+    final x = (r.x - inset).clamp(0.0, r.x);
+    final y = (r.y - inset).clamp(0.0, r.y);
+    return Radius.circular(x < y ? x : y);
+  }
+
+  return BorderRadius.only(
+    topLeft: shrink(radius.topLeft),
+    topRight: shrink(radius.topRight),
+    bottomLeft: shrink(radius.bottomLeft),
+    bottomRight: shrink(radius.bottomRight),
+  );
 }
 
 class _NowPlayingHost extends StatelessWidget {

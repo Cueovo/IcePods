@@ -31,6 +31,13 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- Optional return from browser / intermediate page after QQ confirm. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="qqmusicpod" android:host="login-done" />
+            </intent-filter>
         </activity>
         <service
             android:name="com.ryanheise.audioservice.AudioService"
@@ -65,5 +72,5 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
-    </queries>
+        </queries>
 </manifest>

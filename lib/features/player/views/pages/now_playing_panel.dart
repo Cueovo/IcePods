@@ -334,8 +334,11 @@ class _PlayerProgressPainter extends CustomPainter {
   final bool isBuffering;
   final bool isSeeking;
 
-  Path _wavePath(
+  /// Wave only on the unplayed side of [progressX]. Amplitude is 0 at the
+  /// playhead and ramps up after it, so the curve looks sucked into the dot.
+  Path _unplayedWavePath(
     Rect bounds, {
+    required double progressX,
     required double amplitude,
     required double frequency,
     required double phase,
@@ -343,11 +346,23 @@ class _PlayerProgressPainter extends CustomPainter {
     required double spectrumOffset,
   }) {
     final path = Path();
-    const segments = 56;
+    final startX = progressX.clamp(bounds.left, bounds.right);
+    final remaining = bounds.right - startX;
+    if (remaining <= 0.5) {
+      return path;
+    }
+
+    final absorb = (bounds.width * 0.07).clamp(10.0, 22.0);
+    const segments = 48;
+    var started = false;
     for (var index = 0; index <= segments; index++) {
       final t = index / segments;
-      final x = bounds.left + bounds.width * t;
-      final edgeEnvelope = math.sin(math.pi * t).abs();
+      final x = startX + remaining * t;
+      final distFromHead = x - startX;
+      final absorbEnvelope = (distFromHead / absorb).clamp(0.0, 1.0);
+      final softAbsorb =
+          absorbEnvelope * absorbEnvelope * (3 - 2 * absorbEnvelope);
+      final rightFade = math.sin(math.pi * t * 0.5).clamp(0.0, 1.0);
       final spectralEnvelope =
           .72 +
           math.sin(t * math.pi * 5.2 + phase * .46 + spectrumOffset) * .16 +
@@ -357,9 +372,14 @@ class _PlayerProgressPainter extends CustomPainter {
       final energy = bandEnergy * spectralEnvelope.clamp(.42, 1.18);
       final y =
           bounds.center.dy +
-          (primary + detail) * amplitude * energy * (.38 + edgeEnvelope * .62);
-      if (index == 0) {
+          (primary + detail) *
+              amplitude *
+              energy *
+              softAbsorb *
+              (.45 + rightFade * .55);
+      if (!started) {
         path.moveTo(x, y);
+        started = true;
       } else {
         path.lineTo(x, y);
       }
@@ -384,16 +404,26 @@ class _PlayerProgressPainter extends CustomPainter {
     );
   }
 
-  void _drawWave(
+  void _drawUnplayedWave(
     Canvas canvas,
     Path path, {
     required Color color,
     required double strokeWidth,
     required double baseOpacity,
-    required double progressX,
-    required Size size,
-    required bool emphasized,
   }) {
+    if (path.getBounds().width <= 0) {
+      return;
+    }
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = color.withValues(alpha: baseOpacity * 0.55)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeWidth
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.4),
+    );
     canvas.drawPath(
       path,
       Paint()
@@ -403,34 +433,44 @@ class _PlayerProgressPainter extends CustomPainter {
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round,
     );
-    if (progressX <= 7) {
+  }
+
+  void _drawPlayedSegment(
+    Canvas canvas, {
+    required Rect bounds,
+    required double progressX,
+    required bool emphasized,
+  }) {
+    final endX = progressX.clamp(bounds.left, bounds.right);
+    if (endX - bounds.left <= 0.5) {
       return;
     }
-    canvas.save();
-    canvas.clipRect(Rect.fromLTRB(0, 0, progressX, size.height));
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = color.withValues(alpha: emphasized ? .9 : .72)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = strokeWidth + (emphasized ? 2.4 : 1.7)
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round
-        ..maskFilter = MaskFilter.blur(
-          BlurStyle.normal,
-          emphasized ? 4.5 : 3.2,
-        ),
-    );
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = color
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = strokeWidth
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round,
-    );
-    canvas.restore();
+    final y = bounds.center.dy;
+    // Flat played track — no vertical motion so the head never looks offset.
+    final glow = Paint()
+      ..shader = const LinearGradient(
+        colors: [
+          Color(0x668A4FFF),
+          Color(0x994A8CFF),
+          Color(0xB3E6CFFF),
+        ],
+      ).createShader(Rect.fromLTRB(bounds.left, y - 4, endX, y + 4))
+      ..strokeWidth = emphasized ? 4.2 : 3.4
+      ..strokeCap = StrokeCap.round
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, emphasized ? 4.5 : 3.2);
+    canvas.drawLine(Offset(bounds.left, y), Offset(endX, y), glow);
+
+    final core = Paint()
+      ..shader = const LinearGradient(
+        colors: [
+          Color(0xFF8A4FFF),
+          Color(0xFF4A8CFF),
+          Color(0xFFE6CFFF),
+        ],
+      ).createShader(Rect.fromLTRB(bounds.left, y - 2, endX, y + 2))
+      ..strokeWidth = emphasized ? 2.6 : 2.15
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(Offset(bounds.left, y), Offset(endX, y), core);
   }
 
   @override
@@ -442,38 +482,51 @@ class _PlayerProgressPainter extends CustomPainter {
     final value = progress.clamp(0.0, 1.0);
     final bounds = Rect.fromLTRB(7, 2, size.width - 7, size.height - 2);
     final phase = animationPhase * math.pi * 2;
-    final activity = emphasized ? 1.18 : (isPlaying ? 1.0 : .72);
+    final activity = emphasized ? 1.18 : (isPlaying ? 1.0 : .55);
     final lowEnergy = _bandEnergy(phase, speed: .72, offset: .2);
     final midEnergy = _bandEnergy(phase, speed: 1.08, offset: 2.1);
     final highEnergy = _bandEnergy(phase, speed: 1.56, offset: 4.35);
     final progressX = bounds.left + bounds.width * value;
 
+    // Quiet baseline under the whole bar.
     canvas.drawLine(
       Offset(bounds.left, bounds.center.dy),
       Offset(bounds.right, bounds.center.dy),
       Paint()
-        ..color = const Color(0x24FFFFFF)
+        ..color = const Color(0x1AFFFFFF)
         ..strokeWidth = .75,
     );
 
-    final purplePath = _wavePath(
+    // Played: flat gradient line into the head (no wave → no head offset).
+    _drawPlayedSegment(
+      canvas,
+      bounds: bounds,
+      progressX: progressX,
+      emphasized: emphasized,
+    );
+
+    // Unplayed: waves that start at 0 amplitude on the head and bloom after.
+    final purplePath = _unplayedWavePath(
       bounds,
+      progressX: progressX,
       amplitude: 5.5 * activity,
       frequency: 1.08,
       phase: phase * .42,
       bandEnergy: lowEnergy,
       spectrumOffset: .2,
     );
-    final bluePath = _wavePath(
+    final bluePath = _unplayedWavePath(
       bounds,
+      progressX: progressX,
       amplitude: 6.2 * activity,
       frequency: 1.55,
       phase: math.pi * .72 - phase * .32,
       bandEnergy: midEnergy,
       spectrumOffset: 2.1,
     );
-    final pearlPath = _wavePath(
+    final pearlPath = _unplayedWavePath(
       bounds,
+      progressX: progressX,
       amplitude: 4.4 * activity,
       frequency: 2.05,
       phase: math.pi * 1.24 + phase * .24,
@@ -481,35 +534,26 @@ class _PlayerProgressPainter extends CustomPainter {
       spectrumOffset: 4.35,
     );
 
-    _drawWave(
+    _drawUnplayedWave(
       canvas,
       purplePath,
       color: const Color(0xFF8A4FFF),
       strokeWidth: 2,
-      baseOpacity: .42,
-      progressX: progressX,
-      size: size,
-      emphasized: emphasized,
+      baseOpacity: .38,
     );
-    _drawWave(
+    _drawUnplayedWave(
       canvas,
       bluePath,
       color: const Color(0xFF4A8CFF),
       strokeWidth: 1.55,
-      baseOpacity: .34,
-      progressX: progressX,
-      size: size,
-      emphasized: emphasized,
+      baseOpacity: .32,
     );
-    _drawWave(
+    _drawUnplayedWave(
       canvas,
       pearlPath,
       color: const Color(0xFFE6CFFF),
       strokeWidth: 1.1,
-      baseOpacity: .5,
-      progressX: progressX,
-      size: size,
-      emphasized: emphasized,
+      baseOpacity: .46,
     );
 
     final head = Offset(progressX, bounds.center.dy);

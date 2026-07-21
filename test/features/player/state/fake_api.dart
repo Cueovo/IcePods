@@ -10,6 +10,7 @@ class FakeQqMusicApi implements QqMusicApi {
   QqMusicCredential? storedCredential;
   final List<String> createdQrLoginTypes = [];
   final Set<String> unavailableSongMids = {};
+  Object? qrStatusError;
   final Map<QqMusicFeature, int> featureLoadCounts = {};
   final List<QqMusicFeature> forcedFeatureRefreshes = [];
   final List<({QqMusicItem song, bool liked})> songLikedChanges = [];
@@ -137,6 +138,10 @@ class FakeQqMusicApi implements QqMusicApi {
   @override
   Future<QqMusicQrStatus> checkQrStatus(QqMusicQrCode qrCode) async {
     qrStatusChecks += 1;
+    final injected = qrStatusError;
+    if (injected != null) {
+      throw injected;
+    }
     return QqMusicQrStatus(
       event: 1,
       done: false,
@@ -176,7 +181,10 @@ class FakeQqMusicApi implements QqMusicApi {
   @override
   Future<Uri> getPlayableUrl(QqMusicItem song, {int fileType = 13}) async {
     if (unavailableSongMids.contains(song.mid)) {
-      throw const QqMusicApiException('歌曲没有可用播放地址');
+      throw const QqMusicApiException(
+        '歌曲没有可用播放地址',
+        code: 104003,
+      );
     }
     return Uri.parse('https://example.com/${song.mid}.mp3');
   }

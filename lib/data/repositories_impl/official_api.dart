@@ -254,8 +254,8 @@ class QqMusicOfficialApi implements QqMusicApi {
       final urls = await _loadPlayableUrls([resolved], fileType: fileType);
       final url = urls[resolved.mid];
       if (url == null) {
-        throw const QqMusicApiException(
-          '歌曲没有可用播放地址，可能需要会员或存在版权限制',
+        throw QqMusicApiException(
+          _playableUrlUnavailableMessage(resolved),
           code: 104003,
         );
       }
@@ -458,6 +458,21 @@ class QqMusicOfficialApi implements QqMusicApi {
       throw const QqMusicApiException('请先扫码登录 QQ 音乐', statusCode: 401);
     }
     return active;
+  }
+
+  /// Prefer specific playback reasons over a single generic “no URL” string.
+  String _playableUrlUnavailableMessage(QqMusicItem song) {
+    if (song.requiresVip) {
+      return '该歌曲需要 VIP 会员才能播放';
+    }
+    if (song.isCopyrightRestricted) {
+      return '歌曲暂无版权';
+    }
+    final active = credential;
+    if (active == null || !active.isValid) {
+      return '当前未登录，该歌曲暂无游客播放地址';
+    }
+    return '歌曲没有可用播放地址，可能需要会员或存在版权限制';
   }
 
   Future<T> _runDirect<T>(Future<T> Function() operation) async {

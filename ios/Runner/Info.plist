@@ -87,5 +87,19 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.qqmusic.ipod.login</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>qqmusicpod</string>
+			</array>
+		</dict>
+	</array>
+	
 </dict>
 </plist>

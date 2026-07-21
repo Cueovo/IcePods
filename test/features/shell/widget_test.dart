@@ -133,9 +133,10 @@ void main() {
 
       expect(find.byKey(const ValueKey('api-feature-list')), findsOneWidget);
       expect(find.text('测试歌曲一'), findsOneWidget);
-      expect(find.text('歌曲没有可用播放地址，可能需要会员或存在版权限制'), findsOneWidget);
-      expect(find.byKey(const ValueKey('unavailable-badge-1')), findsOneWidget);
-      expect(find.text('无音源'), findsOneWidget);
+      expect(find.text('当前未登录，该歌曲暂无游客播放地址'), findsOneWidget);
+      // Guest play failures only toast; do not stamp the list as 无音源.
+      expect(find.byKey(const ValueKey('unavailable-badge-1')), findsNothing);
+      expect(find.text('无音源'), findsNothing);
       expect(find.byKey(const ValueKey('player-artwork')), findsNothing);
     },
   );
@@ -712,19 +713,29 @@ void main() {
     addTearDown(tester.view.reset);
 
     await pumpStatusBar(size: const Size(375, 667), safeTop: 20);
-    final classicBar = tester.getRect(
-      find.byKey(const ValueKey('ipod-status-bar')),
-    );
     final classicTime = tester.getRect(
       find.byKey(const ValueKey('ipod-status-time')),
     );
     final classicStatus = tester.getRect(
       find.byKey(const ValueKey('ipod-status-items')),
     );
-    expect(classicTime.center.dx, closeTo(classicBar.center.dx, .01));
+    // Classic / Android fallback: time leading-left, status trailing-right.
+    expect(classicTime.left, closeTo(18, 1));
     expect(classicTime.center.dy, closeTo(10, .01));
-    expect(classicStatus.right, closeTo(359, .01));
+    expect(classicStatus.right, closeTo(359.25, 1));
     expect(classicStatus.center.dy, closeTo(10, .01));
+    expect(classicTime.center.dx, lessThan(classicStatus.center.dx));
+
+    // Typical Android status inset (24–32) must not center the clock.
+    await pumpStatusBar(size: const Size(390, 844), safeTop: 28);
+    final androidTime = tester.getRect(
+      find.byKey(const ValueKey('ipod-status-time')),
+    );
+    final androidBar = tester.getRect(
+      find.byKey(const ValueKey('ipod-status-bar')),
+    );
+    expect(androidTime.left, closeTo(18.72, 1.5));
+    expect(androidTime.center.dx, lessThan(androidBar.center.dx - 40));
 
     await pumpStatusBar(size: const Size(390, 844), safeTop: 47);
     final notchTimeSlot = tester.getRect(
@@ -822,6 +833,37 @@ void main() {
       tester.getSize(find.byKey(const ValueKey('fullscreen-player'))),
       const Size(390, 844),
     );
+  });
+
+  testWidgets('adapts chassis top margin for cutout families', (
+    WidgetTester tester,
+  ) async {
+    Future<double> frameTop(double safeTop) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.viewPadding = FakeViewPadding(top: safeTop);
+      tester.view.padding = FakeViewPadding(top: safeTop);
+      await tester.pumpWidget(MyApp(api: FakeQqMusicApi()));
+      await tester.pump();
+      final shell = tester.getRect(
+        find.byKey(const ValueKey('fullscreen-player')),
+      );
+      final frame = tester.getRect(
+        find.byKey(const ValueKey('ipod-screen-frame')),
+      );
+      return frame.top - shell.top;
+    }
+
+    addTearDown(tester.view.reset);
+
+    // classic SE-like (rawTop 20) → outer 8 + frame 10
+    expect(await frameTop(20), closeTo(18, 1));
+    // Android punch-hole: whole module shifts (white rim just above hole)
+    expect(await frameTop(28), closeTo(3.66, 1));
+    // notch / island: small chassis lip
+    expect(await frameTop(47), closeTo(4, 1));
+    tester.view.physicalSize = const Size(393, 852);
+    expect(await frameTop(59), closeTo(4, 1));
   });
 
   testWidgets('uses the full-size wheel on a tall phone', (
