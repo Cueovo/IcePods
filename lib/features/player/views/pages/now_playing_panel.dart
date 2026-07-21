@@ -1117,6 +1117,7 @@ class _LyricLineText extends StatelessWidget {
   final int relativeIndex;
   final double lineTransition;
 
+  /// 0–1 progress by UTF-16 length so [TextSelection] offsets stay consistent.
   double get _wordProgress {
     if (!line.hasWordTimeline) {
       return 0;
@@ -1129,14 +1130,14 @@ class _LyricLineText extends StatelessWidget {
     }
     final totalLength = line.words.fold<int>(
       0,
-      (length, word) => length + word.text.runes.length,
+      (length, word) => length + word.text.length,
     );
     if (totalLength == 0) {
       return 0;
     }
     var completedLength = 0.0;
     for (final word in line.words) {
-      final wordLength = word.text.runes.length;
+      final wordLength = word.text.length;
       if (position >= word.endTime) {
         completedLength += wordLength;
         continue;
@@ -1174,7 +1175,7 @@ class _LyricLineText extends StatelessWidget {
         : previous
         ? Offset(0, -.1 * leaving)
         : Offset(0, relativeIndex < 0 ? -.1 : .1);
-    final style = TextStyle(
+    final baseStyle = TextStyle(
       color: line.hasWordTimeline && (active || previous)
           ? const Color(0x66FFFFFF)
           : Colors.white,
@@ -1183,15 +1184,6 @@ class _LyricLineText extends StatelessWidget {
       height: 1.15,
       letterSpacing: .15,
     );
-    Widget lyricText(TextStyle resolvedStyle) {
-      return Text(
-        line.text,
-        textAlign: TextAlign.center,
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        style: resolvedStyle,
-      );
-    }
 
     final highlightReveal = active
         ? ((lineTransition - .18) / .37).clamp(0.0, 1.0)
@@ -1204,36 +1196,43 @@ class _LyricLineText extends StatelessWidget {
         opacity: opacity,
         child: Transform.scale(
           scale: scale,
-          child: DefaultTextStyle(
-            style: style,
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    if (active)
-                      const SizedBox.shrink(key: ValueKey('active-lyric-line')),
-                    lyricText(const TextStyle()),
-                    if ((active || previous) && line.hasWordTimeline)
-                      Opacity(
-                        key: active
-                            ? const ValueKey('active-lyric-highlight-reveal')
-                            : null,
-                        opacity: highlightReveal,
-                        child: ShaderMask(
-                          key: active
-                              ? const ValueKey('active-lyric-progress')
-                              : null,
-                          blendMode: BlendMode.dstIn,
-                          shaderCallback: (bounds) =>
-                              _lyricProgressShader(bounds, _wordProgress),
-                          child: lyricText(style.copyWith(color: Colors.white)),
-                        ),
-                      ),
-                  ],
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                if (active)
+                  const SizedBox.shrink(key: ValueKey('active-lyric-line')),
+                // Dim base + karaoke highlight share the same full-width box so
+                // glyph clip rects stay aligned when the lyric wraps.
+                SizedBox(
+                  width: double.infinity,
+                  child: Text(
+                    line.text,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: baseStyle,
+                  ),
                 ),
-              ),
+                if ((active || previous) && line.hasWordTimeline)
+                  Opacity(
+                    key: active
+                        ? const ValueKey('active-lyric-highlight-reveal')
+                        : null,
+                    opacity: highlightReveal,
+                    child: _KaraokeLineHighlight(
+                      key: active
+                          ? const ValueKey('active-lyric-progress')
+                          : ValueKey(
+                              'lyric-highlight-${line.time.inMilliseconds}',
+                            ),
+                      text: line.text,
+                      style: baseStyle.copyWith(color: Colors.white),
+                      progress: _wordProgress,
+                    ),
+                  ),
+              ],
             ),
           ),
         ),
@@ -1242,29 +1241,108 @@ class _LyricLineText extends StatelessWidget {
   }
 }
 
-Shader _lyricProgressShader(Rect bounds, double progress) {
-  final value = progress.clamp(0.0, 1.0);
-  if (value <= 0) {
-    return const LinearGradient(
-      colors: [Colors.transparent, Colors.transparent],
-    ).createShader(bounds);
+/// Word-timed highlight that follows text layout, including wrapped lines.
+///
+/// A horizontal [ShaderMask] lights both visual rows from the left at once;
+/// this clips the bright layer to [TextPainter.getBoxesForSelection] so the
+/// second row stays dim until the character cursor reaches it.
+class _KaraokeLineHighlight extends StatelessWidget {
+  const _KaraokeLineHighlight({
+    required this.text,
+    required this.style,
+    required this.progress,
+    super.key,
+  });
+
+  final String text;
+  final TextStyle style;
+  final double progress;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxWidth = constraints.maxWidth;
+        if (!maxWidth.isFinite || maxWidth <= 0) {
+          return const SizedBox.shrink();
+        }
+        final painter = TextPainter(
+          text: TextSpan(text: text, style: style),
+          textAlign: TextAlign.center,
+          textDirection: TextDirection.ltr,
+          maxLines: 2,
+          ellipsis: '…',
+        )..layout(maxWidth: maxWidth);
+
+        final value = progress.clamp(0.0, 1.0);
+        final path = _karaokeClipPath(painter, text, value);
+
+        return SizedBox(
+          width: maxWidth,
+          height: painter.height,
+          child: ClipPath(
+            clipper: _PathClipper(path),
+            child: Text(
+              text,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: style,
+            ),
+          ),
+        );
+      },
+    );
   }
-  if (value >= 1) {
-    return const LinearGradient(
-      colors: [Colors.white, Colors.white],
-    ).createShader(bounds);
+}
+
+Path _karaokeClipPath(TextPainter painter, String text, double progress) {
+  final path = Path();
+  if (progress <= 0 || text.isEmpty) {
+    return path;
   }
-  final softStart = (value - .055).clamp(0.0, 1.0);
-  final softEnd = (value + .018).clamp(0.0, 1.0);
-  return LinearGradient(
-    colors: const [
-      Colors.white,
-      Colors.white,
-      Color(0x00FFFFFF),
-      Color(0x00FFFFFF),
-    ],
-    stops: [0, softStart, softEnd, 1],
-  ).createShader(bounds);
+  if (progress >= 1) {
+    path.addRect(Rect.fromLTWH(0, 0, painter.width, painter.height));
+    return path;
+  }
+
+  final exact = text.length * progress;
+  final solidEnd = exact.floor().clamp(0, text.length);
+  if (solidEnd > 0) {
+    for (final box in painter.getBoxesForSelection(
+      TextSelection(baseOffset: 0, extentOffset: solidEnd),
+    )) {
+      path.addRect(box.toRect());
+    }
+  }
+
+  final fraction = exact - solidEnd;
+  if (fraction > 0.001 && solidEnd < text.length) {
+    final next = solidEnd + 1;
+    for (final box in painter.getBoxesForSelection(
+      TextSelection(baseOffset: solidEnd, extentOffset: next),
+    )) {
+      final rect = box.toRect();
+      final width = rect.width * fraction.clamp(0.0, 1.0);
+      if (width > 0) {
+        path.addRect(Rect.fromLTWH(rect.left, rect.top, width, rect.height));
+      }
+    }
+  }
+  return path;
+}
+
+class _PathClipper extends CustomClipper<Path> {
+  const _PathClipper(this.path);
+
+  final Path path;
+
+  @override
+  Path getClip(Size size) => path;
+
+  @override
+  bool shouldReclip(covariant _PathClipper oldClipper) =>
+      !identical(path, oldClipper.path);
 }
 
 const _timeStyle = TextStyle(

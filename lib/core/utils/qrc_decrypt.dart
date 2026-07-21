@@ -1,0 +1,360 @@
+// Port of qqmusic-web/qqmusic_api/algorithms (QRC 3DES + zlib).
+// Custom 3DES variant for QQ Music lyrics — not standard Triple-DES.
+// SPDX-FileCopyrightText: Copyright (c) 2024 沉默の金 <cmzj@cmzj.org>
+// SPDX-License-Identifier: GPL-3.0-only
+
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:archive/archive.dart';
+
+const int _kEncrypt = 1;
+const int _kDecrypt = 0;
+
+/// Fixed 24-byte key used by QQ Music QRC (same as qqmusic-web).
+final List<int> _qrc3desKey = utf8.encode(r'!@#)(*$%123ZXC!@!@#)(NHL');
+
+const List<List<int>> _sbox = [
+  [14, 4, 13, 1, 2, 15, 11, 8, 3, 10, 6, 12, 5, 9, 0, 7, 0, 15, 7, 4, 14, 2, 13, 1, 10, 6, 12, 11, 9, 5, 3, 8, 4, 1, 14, 8, 13, 6, 2, 11, 15, 12, 9, 7, 3, 10, 5, 0, 15, 12, 8, 2, 4, 9, 1, 7, 5, 11, 3, 14, 10, 0, 6, 13],
+  [15, 1, 8, 14, 6, 11, 3, 4, 9, 7, 2, 13, 12, 0, 5, 10, 3, 13, 4, 7, 15, 2, 8, 15, 12, 0, 1, 10, 6, 9, 11, 5, 0, 14, 7, 11, 10, 4, 13, 1, 5, 8, 12, 6, 9, 3, 2, 15, 13, 8, 10, 1, 3, 15, 4, 2, 11, 6, 7, 12, 0, 5, 14, 9],
+  [10, 0, 9, 14, 6, 3, 15, 5, 1, 13, 12, 7, 11, 4, 2, 8, 13, 7, 0, 9, 3, 4, 6, 10, 2, 8, 5, 14, 12, 11, 15, 1, 13, 6, 4, 9, 8, 15, 3, 0, 11, 1, 2, 12, 5, 10, 14, 7, 1, 10, 13, 0, 6, 9, 8, 7, 4, 15, 14, 3, 11, 5, 2, 12],
+  [7, 13, 14, 3, 0, 6, 9, 10, 1, 2, 8, 5, 11, 12, 4, 15, 13, 8, 11, 5, 6, 15, 0, 3, 4, 7, 2, 12, 1, 10, 14, 9, 10, 6, 9, 0, 12, 11, 7, 13, 15, 1, 3, 14, 5, 2, 8, 4, 3, 15, 0, 6, 10, 10, 13, 8, 9, 4, 5, 11, 12, 7, 2, 14],
+  [2, 12, 4, 1, 7, 10, 11, 6, 8, 5, 3, 15, 13, 0, 14, 9, 14, 11, 2, 12, 4, 7, 13, 1, 5, 0, 15, 10, 3, 9, 8, 6, 4, 2, 1, 11, 10, 13, 7, 8, 15, 9, 12, 5, 6, 3, 0, 14, 11, 8, 12, 7, 1, 14, 2, 13, 6, 15, 0, 9, 10, 4, 5, 3],
+  [12, 1, 10, 15, 9, 2, 6, 8, 0, 13, 3, 4, 14, 7, 5, 11, 10, 15, 4, 2, 7, 12, 9, 5, 6, 1, 13, 14, 0, 11, 3, 8, 9, 14, 15, 5, 2, 8, 12, 3, 7, 0, 4, 10, 1, 13, 11, 6, 4, 3, 2, 12, 9, 5, 15, 10, 11, 14, 1, 7, 6, 0, 8, 13],
+  [4, 11, 2, 14, 15, 0, 8, 13, 3, 12, 9, 7, 5, 10, 6, 1, 13, 0, 11, 7, 4, 9, 1, 10, 14, 3, 5, 12, 2, 15, 8, 6, 1, 4, 11, 13, 12, 3, 7, 14, 10, 15, 6, 8, 0, 5, 9, 2, 6, 11, 13, 8, 1, 4, 10, 7, 9, 5, 0, 15, 14, 2, 3, 12],
+  [13, 2, 8, 4, 6, 15, 11, 1, 10, 9, 3, 14, 5, 0, 12, 7, 1, 15, 13, 8, 10, 3, 7, 4, 12, 5, 6, 11, 0, 14, 9, 2, 7, 11, 4, 1, 9, 12, 14, 2, 0, 6, 10, 13, 15, 3, 5, 8, 2, 1, 14, 7, 4, 10, 8, 13, 15, 12, 9, 0, 3, 5, 6, 11]
+];
+
+int _sboxBit(int a) {
+  // Same bit mash as qqmusic-web tripledes.sbox_bit.
+  return (a & 32) | ((a & 31) >> 1) | ((a & 1) << 4);
+}
+
+List<int> _initialPermutation(List<int> inputData) {
+  final v0 = inputData[0] |
+      (inputData[1] << 8) |
+      (inputData[2] << 16) |
+      (inputData[3] << 24);
+  final v1 = inputData[4] |
+      (inputData[5] << 8) |
+      (inputData[6] << 16) |
+      (inputData[7] << 24);
+
+  final s0 = ((v1 >> 6) & 1) << 31 |
+      ((v1 >> 14) & 1) << 30 |
+      ((v1 >> 22) & 1) << 29 |
+      ((v1 >> 30) & 1) << 28 |
+      ((v0 >> 6) & 1) << 27 |
+      ((v0 >> 14) & 1) << 26 |
+      ((v0 >> 22) & 1) << 25 |
+      ((v0 >> 30) & 1) << 24 |
+      ((v1 >> 4) & 1) << 23 |
+      ((v1 >> 12) & 1) << 22 |
+      ((v1 >> 20) & 1) << 21 |
+      ((v1 >> 28) & 1) << 20 |
+      ((v0 >> 4) & 1) << 19 |
+      ((v0 >> 12) & 1) << 18 |
+      ((v0 >> 20) & 1) << 17 |
+      ((v0 >> 28) & 1) << 16 |
+      ((v1 >> 2) & 1) << 15 |
+      ((v1 >> 10) & 1) << 14 |
+      ((v1 >> 18) & 1) << 13 |
+      ((v1 >> 26) & 1) << 12 |
+      ((v0 >> 2) & 1) << 11 |
+      ((v0 >> 10) & 1) << 10 |
+      ((v0 >> 18) & 1) << 9 |
+      ((v0 >> 26) & 1) << 8 |
+      ((v1 >> 0) & 1) << 7 |
+      ((v1 >> 8) & 1) << 6 |
+      ((v1 >> 16) & 1) << 5 |
+      ((v1 >> 24) & 1) << 4 |
+      ((v0 >> 0) & 1) << 3 |
+      ((v0 >> 8) & 1) << 2 |
+      ((v0 >> 16) & 1) << 1 |
+      ((v0 >> 24) & 1);
+
+  final s1 = ((v1 >> 7) & 1) << 31 |
+      ((v1 >> 15) & 1) << 30 |
+      ((v1 >> 23) & 1) << 29 |
+      ((v1 >> 31) & 1) << 28 |
+      ((v0 >> 7) & 1) << 27 |
+      ((v0 >> 15) & 1) << 26 |
+      ((v0 >> 23) & 1) << 25 |
+      ((v0 >> 31) & 1) << 24 |
+      ((v1 >> 5) & 1) << 23 |
+      ((v1 >> 13) & 1) << 22 |
+      ((v1 >> 21) & 1) << 21 |
+      ((v1 >> 29) & 1) << 20 |
+      ((v0 >> 5) & 1) << 19 |
+      ((v0 >> 13) & 1) << 18 |
+      ((v0 >> 21) & 1) << 17 |
+      ((v0 >> 29) & 1) << 16 |
+      ((v1 >> 3) & 1) << 15 |
+      ((v1 >> 11) & 1) << 14 |
+      ((v1 >> 19) & 1) << 13 |
+      ((v1 >> 27) & 1) << 12 |
+      ((v0 >> 3) & 1) << 11 |
+      ((v0 >> 11) & 1) << 10 |
+      ((v0 >> 19) & 1) << 9 |
+      ((v0 >> 27) & 1) << 8 |
+      ((v1 >> 1) & 1) << 7 |
+      ((v1 >> 9) & 1) << 6 |
+      ((v1 >> 17) & 1) << 5 |
+      ((v1 >> 25) & 1) << 4 |
+      ((v0 >> 1) & 1) << 3 |
+      ((v0 >> 9) & 1) << 2 |
+      ((v0 >> 17) & 1) << 1 |
+      ((v0 >> 25) & 1);
+
+  return [s0, s1];
+}
+
+List<int> _inversePermutation(int s0, int s1) {
+  final data = List<int>.filled(8, 0);
+  data[3] = ((s1 >> 24) & 1) << 7 |
+      ((s0 >> 24) & 1) << 6 |
+      ((s1 >> 16) & 1) << 5 |
+      ((s0 >> 16) & 1) << 4 |
+      ((s1 >> 8) & 1) << 3 |
+      ((s0 >> 8) & 1) << 2 |
+      ((s1 >> 0) & 1) << 1 |
+      ((s0 >> 0) & 1);
+  data[2] = ((s1 >> 25) & 1) << 7 |
+      ((s0 >> 25) & 1) << 6 |
+      ((s1 >> 17) & 1) << 5 |
+      ((s0 >> 17) & 1) << 4 |
+      ((s1 >> 9) & 1) << 3 |
+      ((s0 >> 9) & 1) << 2 |
+      ((s1 >> 1) & 1) << 1 |
+      ((s0 >> 1) & 1);
+  data[1] = ((s1 >> 26) & 1) << 7 |
+      ((s0 >> 26) & 1) << 6 |
+      ((s1 >> 18) & 1) << 5 |
+      ((s0 >> 18) & 1) << 4 |
+      ((s1 >> 10) & 1) << 3 |
+      ((s0 >> 10) & 1) << 2 |
+      ((s1 >> 2) & 1) << 1 |
+      ((s0 >> 2) & 1);
+  data[0] = ((s1 >> 27) & 1) << 7 |
+      ((s0 >> 27) & 1) << 6 |
+      ((s1 >> 19) & 1) << 5 |
+      ((s0 >> 19) & 1) << 4 |
+      ((s1 >> 11) & 1) << 3 |
+      ((s0 >> 11) & 1) << 2 |
+      ((s1 >> 3) & 1) << 1 |
+      ((s0 >> 3) & 1);
+  data[7] = ((s1 >> 28) & 1) << 7 |
+      ((s0 >> 28) & 1) << 6 |
+      ((s1 >> 20) & 1) << 5 |
+      ((s0 >> 20) & 1) << 4 |
+      ((s1 >> 12) & 1) << 3 |
+      ((s0 >> 12) & 1) << 2 |
+      ((s1 >> 4) & 1) << 1 |
+      ((s0 >> 4) & 1);
+  data[6] = ((s1 >> 29) & 1) << 7 |
+      ((s0 >> 29) & 1) << 6 |
+      ((s1 >> 21) & 1) << 5 |
+      ((s0 >> 21) & 1) << 4 |
+      ((s1 >> 13) & 1) << 3 |
+      ((s0 >> 13) & 1) << 2 |
+      ((s1 >> 5) & 1) << 1 |
+      ((s0 >> 5) & 1);
+  data[5] = ((s1 >> 30) & 1) << 7 |
+      ((s0 >> 30) & 1) << 6 |
+      ((s1 >> 22) & 1) << 5 |
+      ((s0 >> 22) & 1) << 4 |
+      ((s1 >> 14) & 1) << 3 |
+      ((s0 >> 14) & 1) << 2 |
+      ((s1 >> 6) & 1) << 1 |
+      ((s0 >> 6) & 1);
+  data[4] = ((s1 >> 31) & 1) << 7 |
+      ((s0 >> 31) & 1) << 6 |
+      ((s1 >> 23) & 1) << 5 |
+      ((s0 >> 23) & 1) << 4 |
+      ((s1 >> 15) & 1) << 3 |
+      ((s0 >> 15) & 1) << 2 |
+      ((s1 >> 7) & 1) << 1 |
+      ((s0 >> 7) & 1);
+  return data;
+}
+
+int _f(int state, List<int> key) {
+  final t1 = ((state & 1) << 31) |
+      ((state & 0xF8000000) >> 1) |
+      ((state & 0x1F800000) >> 3) |
+      ((state & 0x01F80000) >> 5) |
+      ((state & 0x001F8000) >> 7);
+  final t2 = ((state & 0x0001F800) << 15) |
+      ((state & 0x00001F80) << 13) |
+      ((state & 0x000001F8) << 11) |
+      ((state & 0x0000001F) << 9) |
+      ((state & 0x80000000) >> 23);
+
+  final k0 = ((t1 >> 24) & 0xFF) ^ key[0];
+  final k1 = ((t1 >> 16) & 0xFF) ^ key[1];
+  final k2 = ((t1 >> 8) & 0xFF) ^ key[2];
+  final k3 = ((t2 >> 24) & 0xFF) ^ key[3];
+  final k4 = ((t2 >> 16) & 0xFF) ^ key[4];
+  final k5 = ((t2 >> 8) & 0xFF) ^ key[5];
+
+  final out = (_sbox[0][_sboxBit(k0 >> 2)] << 28) |
+      (_sbox[1][_sboxBit(((k0 & 0x03) << 4) | (k1 >> 4))] << 24) |
+      (_sbox[2][_sboxBit(((k1 & 0x0F) << 2) | (k2 >> 6))] << 20) |
+      (_sbox[3][_sboxBit(k2 & 0x3F)] << 16) |
+      (_sbox[4][_sboxBit(k3 >> 2)] << 12) |
+      (_sbox[5][_sboxBit(((k3 & 0x03) << 4) | (k4 >> 4))] << 8) |
+      (_sbox[6][_sboxBit(((k4 & 0x0F) << 2) | (k5 >> 6))] << 4) |
+      _sbox[7][_sboxBit(k5 & 0x3F)];
+
+  return ((out >> 16) & 1) << 31 |
+      ((out >> 25) & 1) << 30 |
+      ((out >> 12) & 1) << 29 |
+      ((out >> 11) & 1) << 28 |
+      ((out >> 3) & 1) << 27 |
+      ((out >> 20) & 1) << 26 |
+      ((out >> 4) & 1) << 25 |
+      ((out >> 15) & 1) << 24 |
+      ((out >> 31) & 1) << 23 |
+      ((out >> 17) & 1) << 22 |
+      ((out >> 9) & 1) << 21 |
+      ((out >> 6) & 1) << 20 |
+      ((out >> 27) & 1) << 19 |
+      ((out >> 14) & 1) << 18 |
+      ((out >> 1) & 1) << 17 |
+      ((out >> 22) & 1) << 16 |
+      ((out >> 30) & 1) << 15 |
+      ((out >> 24) & 1) << 14 |
+      ((out >> 8) & 1) << 13 |
+      ((out >> 18) & 1) << 12 |
+      ((out >> 0) & 1) << 11 |
+      ((out >> 5) & 1) << 10 |
+      ((out >> 29) & 1) << 9 |
+      ((out >> 23) & 1) << 8 |
+      ((out >> 13) & 1) << 7 |
+      ((out >> 19) & 1) << 6 |
+      ((out >> 2) & 1) << 5 |
+      ((out >> 26) & 1) << 4 |
+      ((out >> 10) & 1) << 3 |
+      ((out >> 21) & 1) << 2 |
+      ((out >> 28) & 1) << 1 |
+      ((out >> 7) & 1);
+}
+
+List<int> _crypt(List<int> inputData, List<List<int>> key) {
+  final permuted = _initialPermutation(inputData);
+  var s0 = permuted[0];
+  var s1 = permuted[1];
+  for (var idx = 0; idx < 15; idx++) {
+    final previousS1 = s1;
+    s1 = _f(s1, key[idx]) ^ s0;
+    s0 = previousS1;
+  }
+  s0 = _f(s1, key[15]) ^ s0;
+  return _inversePermutation(s0, s1);
+}
+
+const List<int> _keyRndShift = [1, 1, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 1];
+const List<int> _keyPermC = [
+  56, 48, 40, 32, 24, 16, 8, 0, 57, 49, 41, 33, 25, 17, 9, 1, 58, 50, 42, 34,
+  26, 18, 10, 2, 59, 51, 43, 35,
+];
+const List<int> _keyPermD = [
+  62, 54, 46, 38, 30, 22, 14, 6, 61, 53, 45, 37, 29, 21, 13, 5, 60, 52, 44, 36,
+  28, 20, 12, 4, 27, 19, 11, 3,
+];
+const List<int> _keyCompression = [
+  13, 16, 10, 23, 0, 4, 2, 27, 14, 5, 20, 9, 22, 18, 11, 3, 25, 7, 15, 6, 26,
+  19, 12, 1, 40, 51, 30, 36, 46, 54, 29, 39, 50, 44, 32, 47, 43, 48, 38, 55, 33,
+  52, 45, 41, 49, 35, 28, 31,
+];
+
+List<List<int>> _keySchedule(List<int> key, int mode) {
+  final schedule = List.generate(16, (_) => List<int>.filled(6, 0));
+  final v0 = key[0] | (key[1] << 8) | (key[2] << 16) | (key[3] << 24);
+  final v1 = key[4] | (key[5] << 8) | (key[6] << 16) | (key[7] << 24);
+
+  var c = 0;
+  for (var i = 0; i < _keyPermC.length; i++) {
+    final b = _keyPermC[i];
+    final bit = b < 32 ? ((v0 >> (31 - b)) & 1) : ((v1 >> (63 - b)) & 1);
+    c |= bit << (31 - i);
+  }
+
+  var d = 0;
+  for (var i = 0; i < _keyPermD.length; i++) {
+    final b = _keyPermD[i];
+    final bit = b < 32 ? ((v0 >> (31 - b)) & 1) : ((v1 >> (63 - b)) & 1);
+    d |= bit << (31 - i);
+  }
+
+  for (var i = 0; i < 16; i++) {
+    c = ((c << _keyRndShift[i]) | (c >> (28 - _keyRndShift[i]))) & 0xFFFFFFF0;
+    d = ((d << _keyRndShift[i]) | (d >> (28 - _keyRndShift[i]))) & 0xFFFFFFF0;
+    final togen = mode == _kDecrypt ? 15 - i : i;
+    for (var j = 0; j < 6; j++) {
+      schedule[togen][j] = 0;
+    }
+    for (var j = 0; j < 24; j++) {
+      final bit = (c >> (31 - _keyCompression[j])) & 1;
+      schedule[togen][j ~/ 8] |= bit << (7 - (j % 8));
+    }
+    for (var j = 24; j < 48; j++) {
+      final bit = (d >> (31 - (_keyCompression[j] - 27))) & 1;
+      schedule[togen][j ~/ 8] |= bit << (7 - (j % 8));
+    }
+  }
+  return schedule;
+}
+
+List<List<List<int>>> _tripledesKeySetup(List<int> key, int mode) {
+  if (mode == _kEncrypt) {
+    return [
+      _keySchedule(key.sublist(0, 8), _kEncrypt),
+      _keySchedule(key.sublist(8, 16), _kDecrypt),
+      _keySchedule(key.sublist(16, 24), _kEncrypt),
+    ];
+  }
+  return [
+    _keySchedule(key.sublist(16, 24), _kDecrypt),
+    _keySchedule(key.sublist(8, 16), _kEncrypt),
+    _keySchedule(key.sublist(0, 8), _kDecrypt),
+  ];
+}
+
+List<int> _tripledesCrypt(List<int> data, List<List<List<int>>> key) {
+  var block = List<int>.from(data);
+  for (var i = 0; i < 3; i++) {
+    block = _crypt(block, key[i]);
+  }
+  return block;
+}
+
+/// Decrypt QQ Music encrypted lyric / QRC payload.
+///
+/// Official responses use `crypt == 1` with a hex-encoded ciphertext that is
+/// 3DES-decrypted (custom schedule) then zlib-inflated — same as qqmusic-web.
+String qrcDecrypt(String encryptedQrc) {
+  if (encryptedQrc.isEmpty) {
+    return '';
+  }
+  final encryptedBytes = _hexToBytes(encryptedQrc);
+  final schedule = _tripledesKeySetup(_qrc3desKey, _kDecrypt);
+  final decrypted = BytesBuilder(copy: false);
+  for (var i = 0; i + 8 <= encryptedBytes.length; i += 8) {
+    decrypted.add(_tripledesCrypt(encryptedBytes.sublist(i, i + 8), schedule));
+  }
+  final inflated = const ZLibDecoder().decodeBytes(decrypted.takeBytes());
+  return utf8.decode(inflated);
+}
+
+Uint8List _hexToBytes(String hex) {
+  final cleaned = hex.replaceAll(RegExp(r'\s+'), '');
+  if (cleaned.length.isOdd) {
+    throw const FormatException('QRC hex length is odd');
+  }
+  final out = Uint8List(cleaned.length ~/ 2);
+  for (var i = 0; i < out.length; i++) {
+    out[i] = int.parse(cleaned.substring(i * 2, i * 2 + 2), radix: 16);
+  }
+  return out;
+}

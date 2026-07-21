@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:qqmusic_ipod/core/utils/device_display_metrics.dart';
 import 'package:qqmusic_ipod/features/shell/views/widgets/chassis_insets.dart';
 
 void main() {
@@ -102,6 +103,40 @@ void main() {
         ),
         36,
       );
+    });
+
+    test('iPhone 14 Pro Max uses equal outer margin and concentric radius', () {
+      // 430×932 logical, island safe top ≈59.
+      final media = mq(size: const Size(430, 932), top: 59);
+      final insets = ChassisInsets.resolve(media);
+      expect(insets.family, DeviceTopCutoutFamily.island);
+      expect(insets.topOuter, insets.screenFrameHorizontal);
+      expect(insets.frameTopFromScreen, insets.screenFrameHorizontal);
+
+      DeviceDisplayMetrics.debugSetDisplayCornerRadius(55);
+      final r = ScreenCornerRadius.outerFrame(
+        mq: media,
+        insets: insets,
+        fallback: 36,
+        platform: TargetPlatform.iOS,
+      );
+      // 55 − 8 = 47 concentric.
+      expect(r, closeTo(47, 0.01));
+      DeviceDisplayMetrics.debugSetDisplayCornerRadius(null);
+    });
+
+    test('prefers live native corner radius over heuristic', () {
+      final media = mq(size: const Size(430, 932), top: 59);
+      final insets = ChassisInsets.resolve(media);
+      DeviceDisplayMetrics.debugSetDisplayCornerRadius(62);
+      final r = ScreenCornerRadius.outerFrame(
+        mq: media,
+        insets: insets,
+        fallback: 36,
+        platform: TargetPlatform.iOS,
+      );
+      expect(r, closeTo(54, 0.01)); // 62 − 8
+      DeviceDisplayMetrics.debugSetDisplayCornerRadius(null);
     });
   });
 }

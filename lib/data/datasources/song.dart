@@ -75,10 +75,12 @@ class QqMusicSongModule {
       QqMusicCgiRequest(
         module: 'music.musichallSong.PlayLyricInfo',
         method: 'GetPlayLyricInfo',
+        // Match qqmusic-web LyricApi.get_lyric: crypt=1 + qrc for word timeline.
+        // Response lyric field is hex ciphertext when crypt==1 (see qrcDecrypt).
         param: {
-          'crypt': 0,
+          'crypt': 1,
           'lrc_t': 0,
-          'qrc': false,
+          'qrc': true,
           'qrc_t': 0,
           'roma': false,
           'roma_t': 0,

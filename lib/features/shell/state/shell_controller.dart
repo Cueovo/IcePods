@@ -286,41 +286,71 @@ class ShellController extends ChangeNotifier {
     }
 
     accumulatedDelta += delta;
-    final threshold = mode == PlayerMode.menu ? 18.0 : 22.0;
-    if (accumulatedDelta.abs() <= threshold) {
+    // Smaller threshold = more steps per revolution (classic wheel density).
+    final threshold = mode == PlayerMode.menu ? 14.0 : 18.0;
+    if (accumulatedDelta.abs() < threshold) {
       return;
     }
-    final direction = accumulatedDelta.sign.toInt();
-    accumulatedDelta = 0;
+
+    // Consume every full step in this move so a fast flick can skip several
+    // items — each step gets its own click instead of one tick for the whole swipe.
+    var moved = false;
+    while (accumulatedDelta.abs() >= threshold) {
+      final direction = accumulatedDelta.sign.toInt();
+      accumulatedDelta -= direction * threshold;
+      if (!_stepFromWheel(direction)) {
+        // Hit list end — drop leftover so we don't keep firing at the edge.
+        accumulatedDelta = 0;
+        break;
+      }
+      moved = true;
+    }
+    if (moved) {
+      notifyListeners();
+    }
+  }
+
+  /// Advances selection by one wheel step. Returns false when already at a bound.
+  bool _stepFromWheel(int direction) {
     if (mode == PlayerMode.menu) {
       final entries = currentMenuPage.entries;
-      final next = (menuIndex + direction).clamp(0, entries.length - 1);
-      if (next != menuIndex) {
-        HapticFeedback.selectionClick();
-        _tick();
-        menuIndices[currentMenuPage.section] = next;
-        notifyListeners();
+      if (entries.isEmpty) {
+        return false;
       }
-    } else if (mode == PlayerMode.coverFlow) {
+      final next = (menuIndex + direction).clamp(0, entries.length - 1);
+      if (next == menuIndex) {
+        return false;
+      }
+      HapticFeedback.selectionClick();
+      _tick();
+      menuIndices[currentMenuPage.section] = next;
+      return true;
+    }
+    if (mode == PlayerMode.coverFlow) {
       final albums = coverAlbums;
       if (albums.isEmpty) {
-        return;
+        return false;
       }
       final next = (coverIndex + direction).clamp(0, albums.length - 1);
-      if (next != coverIndex) {
-        HapticFeedback.selectionClick();
-        _tick();
-        coverIndex = next;
-        notifyListeners();
+      if (next == coverIndex) {
+        return false;
       }
-    } else if (mode == PlayerMode.feature) {
+      HapticFeedback.selectionClick();
+      _tick();
+      coverIndex = next;
+      return true;
+    }
+    if (mode == PlayerMode.feature) {
       final previous = music.selectedIndex;
       music.stepSelection(direction);
-      if (music.selectedIndex != previous) {
-        HapticFeedback.selectionClick();
-        _tick();
+      if (music.selectedIndex == previous) {
+        return false;
       }
+      HapticFeedback.selectionClick();
+      _tick();
+      return true;
     }
+    return false;
   }
 
   Future<void> handleRotationEnd() async {

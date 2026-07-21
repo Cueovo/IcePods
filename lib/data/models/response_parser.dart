@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:qqmusic_ipod/business/entities/music.dart';
+import 'package:qqmusic_ipod/core/utils/qrc_decrypt.dart';
 
 class QqMusicResponseParser {
   const QqMusicResponseParser();
@@ -92,7 +93,16 @@ class QqMusicResponseParser {
 
   QqMusicLyrics parseLyrics(Object? data) {
     final map = _map(data);
+    // Official GetPlayLyricInfo: crypt=1 ⇒ lyric/trans/roma are hex QRC cipher.
+    // Prefer decrypted lyric, then fall back to plain qrc / lrc fields.
     var raw = _string(map['lyric']);
+    if (_int(map['crypt']) == 1 && raw.isNotEmpty) {
+      try {
+        raw = qrcDecrypt(raw);
+      } catch (_) {
+        // Keep ciphertext so later plain parsers still no-op cleanly.
+      }
+    }
     if (raw.isEmpty) {
       raw = _string(map['qrc']);
     }
@@ -109,9 +119,11 @@ class QqMusicResponseParser {
 
   String _decodeLyric(String raw) {
     var decoded = raw;
+    // Hex QRC already decrypted above; still try base64 for older plain payloads.
     if (decoded.isNotEmpty &&
         !decoded.contains('[') &&
-        !decoded.contains('<Lyric_1')) {
+        !decoded.contains('<Lyric_1') &&
+        !RegExp(r'^[0-9a-fA-F]+$').hasMatch(decoded.trim())) {
       try {
         decoded = utf8.decode(base64Decode(decoded));
       } catch (_) {}
@@ -227,7 +239,11 @@ class QqMusicResponseParser {
       imageUrl: albumMid.isEmpty ? '' : _albumCover(albumMid),
       type: QqMusicItemType.song,
       duration: Duration(seconds: _int(song['interval'])),
-      songType: _nullableInt(song['type']),
+      // Playlist write ops need the official song type (1 = normal track).
+      songType: _nullableInt(
+            song['type'] ?? song['songtype'] ?? song['song_type'],
+          ) ??
+          1,
       requiresVip: _int(pay['pay_play']) != 0,
       isCopyrightRestricted: _isCopyrightRestricted(file),
     );

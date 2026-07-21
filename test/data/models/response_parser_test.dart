@@ -186,6 +186,18 @@ void main() {
       lyrics.lines.last.time,
       const Duration(seconds: 12, milliseconds: 500),
     );
+    expect(lyrics.lines.first.hasWordTimeline, isFalse);
+  });
+
+  test('parses plain QRC word timeline', () {
+    final lyrics = parser.parseLyrics({
+      'lyric': '[0,1000]你(0,400)好(400,600)\n[1000,800]世(1000,400)界(1400,400)',
+    });
+    expect(lyrics.lines, hasLength(2));
+    expect(lyrics.lines.first.hasWordTimeline, isTrue);
+    expect(lyrics.lines.first.text, '你好');
+    expect(lyrics.lines.first.words, hasLength(2));
+    expect(lyrics.lines.first.words.first.duration, const Duration(milliseconds: 400));
   });
 
   test('parses QQ Music pay_play as the VIP playback requirement', () {

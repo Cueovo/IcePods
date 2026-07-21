@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
+import 'package:qqmusic_ipod/core/utils/device_display_metrics.dart';
+
 /// Top cutout / status chrome family for chassis layout.
 ///
 /// Detection uses [MediaQueryData.viewPadding] (still set under immersive UI):
@@ -165,10 +167,12 @@ class ChassisInsets {
         );
 
       case DeviceTopCutoutFamily.notch:
+        // Match horizontal frame inset so top corners stay concentric with
+        // the physical display curve (uneven top/side margin warps the look).
         return ChassisInsets(
           family: family,
           rawTop: rawTop,
-          topOuter: 4,
+          topOuter: _frameHorizontal,
           screenFrameTop: 0,
           screenFrameHorizontal: _frameHorizontal,
           screenFrameBottom: 8,
@@ -178,11 +182,12 @@ class ChassisInsets {
         );
 
       case DeviceTopCutoutFamily.island:
-        // A few px lower than notch so the white rim clears the island.
+        // Same as notch: equal top/side outer margin for concentric superellipse.
+        // Island clearance comes from residual top inside glass, not a thinner top band.
         return ChassisInsets(
           family: family,
           rawTop: rawTop,
-          topOuter: 6,
+          topOuter: _frameHorizontal,
           screenFrameTop: 0,
           screenFrameHorizontal: _frameHorizontal,
           screenFrameBottom: 8,
@@ -224,9 +229,10 @@ class ChassisInsets {
 
 /// iOS display-corner matching for the simulated screen module.
 ///
-/// On iPhone the physical bezel is a continuous (squircle) curve. The framed
+/// On iPhone the physical display is a continuous (squircle) curve. The framed
 /// glass sits inset from that edge; its outer radius should be concentric:
-/// `deviceCorner − horizontalMargin`. Android keeps the themed iPod radius.
+/// `deviceCorner − outerMargin`. Prefer the live [DeviceDisplayMetrics] value
+/// from `UIScreen` when available. Android keeps the themed iPod radius.
 class ScreenCornerRadius {
   const ScreenCornerRadius._();
 
@@ -246,18 +252,37 @@ class ScreenCornerRadius {
       // Classic flat-top SE: keep the designed iPod panel radius.
       return fallback;
     }
-    final margin = insets.screenFrameHorizontal;
+    // Use the larger of top/side outer margins so the superellipse stays inside
+    // the physical curve when topOuter != horizontal (should match after equalize).
+    final topMargin = insets.frameTopFromScreen;
+    final sideMargin = insets.screenFrameHorizontal;
+    final margin = topMargin > sideMargin ? topMargin : sideMargin;
     final concentric = device - margin;
     // Never inflate past the physical device curve; floor so the panel
     // still reads as rounded if margins were unusually large.
     return concentric.clamp(20.0, device);
   }
 
+  /// Continuous display corner radius in logical points.
+  ///
+  /// Prefers [DeviceDisplayMetrics.displayCornerRadius] (native KVC). Falls
+  /// back to a short-side + cutout-family table when the channel is cold.
+  static double deviceDisplayCorner({
+    required MediaQueryData mq,
+    required DeviceTopCutoutFamily family,
+  }) {
+    final live = DeviceDisplayMetrics.displayCornerRadius;
+    if (live != null && live > 0) {
+      return live;
+    }
+    return _heuristicDeviceCorner(mq: mq, family: family);
+  }
+
   /// Known iPhone display corner radii (logical points), by short side + family.
   ///
   /// Sources: community measurements of `UIScreen._displayCornerRadius` /
-  /// public design references — not a private API call at runtime.
-  static double deviceDisplayCorner({
+  /// public design references — used only when the platform channel is empty.
+  static double _heuristicDeviceCorner({
     required MediaQueryData mq,
     required DeviceTopCutoutFamily family,
   }) {
@@ -288,7 +313,10 @@ class ScreenCornerRadius {
         return 39.0;
 
       case DeviceTopCutoutFamily.island:
-        // 14 Pro / 15 / 16 family continuous corners ≈ 55pt.
+        // 14 Pro / 15 / 16 standard island ≈ 55; 16 Pro family is slightly
+        // larger (~62). Prefer the live channel when available.
+        if (short >= 430) return 55.0; // 14/15/16 Pro Max class
+        if (short >= 402) return 55.0; // 14/15/16 Pro
         return 55.0;
 
       case DeviceTopCutoutFamily.statusBar:

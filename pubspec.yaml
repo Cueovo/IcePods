@@ -48,6 +48,7 @@ dependencies:
   battery_plus: ^7.1.1
   # 7.1+ uses NWPath.isUltraConstrained (iOS 26), which breaks older Xcode/SDK CI.
   connectivity_plus: 7.0.0
+  archive: ^4.0.9
 
 dev_dependencies:
   flutter_test:

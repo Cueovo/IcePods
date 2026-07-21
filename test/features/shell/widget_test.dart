@@ -438,7 +438,7 @@ void main() {
     expect(tester.widget<Opacity>(revealFinder).opacity, 0);
     final previousHighlight = find.descendant(
       of: find.byKey(const ValueKey('lyric-line-0')),
-      matching: find.byType(ShaderMask),
+      matching: find.byType(ClipPath),
     );
     expect(previousHighlight, findsOneWidget);
 

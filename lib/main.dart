@@ -7,11 +7,14 @@ import 'package:qqmusic_ipod/business/repositories/music_repository.dart';
 import 'package:qqmusic_ipod/core/audio/audio_handler.dart';
 import 'package:qqmusic_ipod/core/theme/tokens/app_tokens.dart';
 import 'package:qqmusic_ipod/core/theme/tokens/ipod_shell_theme.dart';
+import 'package:qqmusic_ipod/core/utils/device_display_metrics.dart';
 import 'package:qqmusic_ipod/data/repositories_impl/official_api.dart';
 import 'package:qqmusic_ipod/features/shell/views/pages/ipod_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // iOS: real continuous corner radius before first paint of the framed glass.
+  await DeviceDisplayMetrics.warmUp();
   final audioHandler = await AudioService.init<QqMusicAudioHandler>(
     builder: QqMusicAudioHandler.new,
     config: const AudioServiceConfig(

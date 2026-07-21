@@ -132,13 +132,53 @@ void main() {
     addTearDown(api.dispose);
 
     await api.setSongLiked(FakeQqMusicApi.songs.first, liked: true);
-    final payload = jsonDecode(captured.body) as Map<String, dynamic>;
+    var payload = jsonDecode(captured.body) as Map<String, dynamic>;
 
     expect(payload['req_0']['module'], 'music.musicasset.PlaylistDetailWrite');
     expect(payload['req_0']['method'], 'AddSonglist');
     expect(payload['req_0']['param']['dirId'], 201);
+    expect(payload['req_0']['param']['bFmtUtf8'], true);
     expect(payload['req_0']['param']['v_songInfo'], [
       {'songId': 1, 'songType': 1},
+    ]);
+
+    // unlike_song path: DelSonglist with bools encoded as ints (web default).
+    await api.setSongLiked(FakeQqMusicApi.songs.first, liked: false);
+    payload = jsonDecode(captured.body) as Map<String, dynamic>;
+    expect(payload['req_0']['method'], 'DelSonglist');
+    expect(payload['req_0']['param']['dirId'], 201);
+    expect(payload['req_0']['param']['bFmtUtf8'], 1);
+    expect(payload['req_0']['param']['v_songInfo'], [
+      {'songId': 1, 'songType': 1},
+    ]);
+  });
+
+  test('取消喜欢时缺省 songType 按普通曲 1 发送', () async {
+    late http.Request captured;
+    const credential = QqMusicCredential(
+      musicId: '10001',
+      musicKey: 'music-key',
+    );
+    final transport = MockClient((request) async {
+      captured = request;
+      return _cgiResponse({'retCode': 0});
+    });
+    final api = _officialApi(transport, credential: credential);
+    addTearDown(api.dispose);
+
+    const song = QqMusicItem(
+      id: '99',
+      mid: 'mid-99',
+      title: '无类型歌曲',
+      subtitle: '歌手',
+      imageUrl: '',
+      type: QqMusicItemType.song,
+    );
+    await api.setSongLiked(song, liked: false);
+    final payload = jsonDecode(captured.body) as Map<String, dynamic>;
+    expect(payload['req_0']['method'], 'DelSonglist');
+    expect(payload['req_0']['param']['v_songInfo'], [
+      {'songId': 99, 'songType': 1},
     ]);
   });
 }
