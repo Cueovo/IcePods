@@ -444,8 +444,12 @@ class QqMusicResponseParser {
 
   List<QqMusicItem> _homeFeed(Object? value) {
     final map = _map(value);
-    final shelves = _list(map['shelves']).isNotEmpty
-        ? _list(map['shelves'])
+    final shelfList = _firstNonEmptyList(map['shelves'], map['v_shelf']);
+    final directNiches = _firstNonEmptyList(map['niches'], map['v_niche']);
+    final shelves = shelfList.isNotEmpty
+        ? shelfList
+        : directNiches.isNotEmpty
+        ? [value]
         : _list(value);
     final items = <QqMusicItem>[];
     final seen = <String>{};
@@ -467,9 +471,15 @@ class QqMusicResponseParser {
       final containers = <QqMusicItem>[];
       final songs = <QqMusicItem>[];
 
-      for (final rawNiche in _list(shelf['niches'])) {
+      for (final rawNiche in _firstNonEmptyList(
+        shelf['niches'],
+        shelf['v_niche'],
+      )) {
         final niche = _map(rawNiche);
-        for (final rawCard in _list(niche['cards'])) {
+        for (final rawCard in _firstNonEmptyList(
+          niche['cards'],
+          niche['v_card'],
+        )) {
           final card = _map(rawCard);
           final kind = _homeFeedCardKind(card);
           if (kind == _HomeFeedCardKind.skip) {
@@ -488,6 +498,20 @@ class QqMusicResponseParser {
           } else {
             containers.add(item);
           }
+        }
+      }
+
+      if (songs.isEmpty) {
+        for (final songId in _homeSongIds(shelf)) {
+          songs.add(
+            QqMusicItem(
+              id: songId,
+              title: '推荐歌曲',
+              subtitle: shelfTitle,
+              imageUrl: '',
+              type: QqMusicItemType.song,
+            ),
+          );
         }
       }
 
@@ -551,6 +575,21 @@ class QqMusicResponseParser {
     return _clean(content);
   }
 
+  List<String> _homeSongIds(Map<String, dynamic> shelf) {
+    final miscellany = _map(shelf['miscellany']);
+    final raw = _string(
+      miscellany['songList'] ??
+          miscellany['songlist'] ??
+          shelf['songList'] ??
+          shelf['songlist'],
+    );
+    return raw
+        .split(',')
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty && int.tryParse(value) != null)
+        .toList(growable: false);
+  }
+
   _HomeFeedCardKind _homeFeedCardKind(Map<String, dynamic> card) {
     final type = _int(card['type']);
     final jumpType = _int(card['jumptype']);
@@ -599,6 +638,37 @@ class QqMusicResponseParser {
       return _HomeFeedCardKind.skip;
     }
     return _HomeFeedCardKind.container;
+  }
+
+  bool _homeFeedCardRequiresVip(
+    Map<String, dynamic> card,
+    Map<String, dynamic> miscellany,
+  ) {
+    const flagKeys = [
+      'Pay_status',
+      'pay_status',
+      'pay_play',
+      'is_vip',
+      'vip',
+      'need_vip',
+      'requires_vip',
+      'premium',
+    ];
+    if (flagKeys.any((key) => _truthy(miscellany[key]))) {
+      return true;
+    }
+    final traces = [
+      _string(card['trace']),
+      _string(_map(card['extra_info'])['trace']),
+    ];
+    return traces.any(_containsPremiumMarker);
+  }
+
+  bool _containsPremiumMarker(String trace) {
+    final normalized = trace.toLowerCase();
+    return normalized.contains('-prem') ||
+        normalized.contains('_prem') ||
+        normalized.contains('premium');
   }
 
   bool _isDailyThirtyCard(Map<String, dynamic> card) {
@@ -656,7 +726,7 @@ class QqMusicResponseParser {
         subtitle: subtitle,
         imageUrl: cover,
         type: QqMusicItemType.song,
-        requiresVip: _string(miscellany['Pay_status']) == '1',
+        requiresVip: _homeFeedCardRequiresVip(card, miscellany),
       );
     }
 
@@ -776,6 +846,24 @@ Map<String, dynamic> _map(Object? value) {
 }
 
 List<dynamic> _list(Object? value) => value is List ? value : const [];
+
+List<dynamic> _firstNonEmptyList(Object? primary, Object? fallback) {
+  final primaryList = _list(primary);
+  return primaryList.isNotEmpty ? primaryList : _list(fallback);
+}
+
+bool _truthy(Object? value) {
+  if (value is bool) {
+    return value;
+  }
+  final normalized = _string(value).trim().toLowerCase();
+  return normalized == '1' ||
+      normalized == 'true' ||
+      normalized == 'yes' ||
+      normalized == 'vip' ||
+      normalized == 'premium';
+}
+
 bool _isCopyrightRestricted(Map<String, dynamic> file) {
   if (file.isEmpty) {
     return false;
