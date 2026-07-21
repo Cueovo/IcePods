@@ -344,7 +344,10 @@ class QqMusicController extends ChangeNotifier {
   }
 
   bool isUnavailable(QqMusicItem item) {
-    return item.isSong && _unavailableSongKeys.contains(_songKey(item));
+    return item.isSong &&
+        !item.requiresVip &&
+        !item.isCopyrightRestricted &&
+        _unavailableSongKeys.contains(_songKey(item));
   }
 
   bool isCurrentSong(QqMusicItem item) => _sameSong(item, _currentSong);
@@ -430,7 +433,7 @@ class QqMusicController extends ChangeNotifier {
         );
         notifyListeners();
         if (feature == QqMusicFeature.radar && items.isNotEmpty) {
-          unawaited(activateSelected());
+          await _startRadarPlayback();
         }
         return;
       }
@@ -440,9 +443,8 @@ class QqMusicController extends ChangeNotifier {
         cacheFeature: feature,
       );
       _featurePages[feature] = 1;
-      // Radar is a station: kick off the first track without blocking UI.
       if (feature == QqMusicFeature.radar && items.isNotEmpty) {
-        unawaited(activateSelected());
+        await _startRadarPlayback();
       }
     }
   }
@@ -471,7 +473,40 @@ class QqMusicController extends ChangeNotifier {
         cacheFeature: feature,
       );
       _featurePages[feature] = 1;
+      if (feature == QqMusicFeature.radar && items.isNotEmpty) {
+        await _startRadarPlayback();
+      }
     }
+  }
+
+  Future<bool> _startRadarPlayback() async {
+    final stationItems = items;
+    if (stationItems.isEmpty) {
+      return false;
+    }
+    final initialIndex = _selectedIndex.clamp(0, stationItems.length - 1);
+    for (var offset = 0; offset < stationItems.length; offset++) {
+      final index = (initialIndex + offset) % stationItems.length;
+      final song = stationItems[index];
+      if (!song.isSong ||
+          _shouldBlockVipPlayback(song) ||
+          song.isCopyrightRestricted ||
+          isUnavailable(song)) {
+        continue;
+      }
+      _selectedIndex = index;
+      notifyListeners();
+      if (isCurrentSong(song)) {
+        if (!isPlaying) {
+          await _startPlayback();
+        }
+        return true;
+      }
+      if (await play(song, queue: stationItems)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   Future<void> search(String keyword) async {
@@ -756,7 +791,6 @@ class QqMusicController extends ChangeNotifier {
       _containerPath.add(item);
       _selectedIndex = _selectionFor(embedded.items);
       notifyListeners();
-      await _probePlayableUrls(embedded.items);
       return true;
     }
     if (item.type == QqMusicItemType.musicVideo) {
@@ -838,10 +872,7 @@ class QqMusicController extends ChangeNotifier {
     try {
       final prefetchedUrl = await _takePrefetchedPlayableUrl(song);
       if (prefetchedUrl == null && isUnavailable(song)) {
-        throw QqMusicApiException(
-          _unavailableSongMessage(song),
-          code: 104003,
-        );
+        throw QqMusicApiException(_unavailableSongMessage(song), code: 104003);
       }
       final url = prefetchedUrl ?? await api.getPlayableUrl(song);
       _unavailableSongKeys.remove(_songKey(song));
@@ -1307,13 +1338,24 @@ class QqMusicController extends ChangeNotifier {
     }
     final wasLiked = isCurrentSongLiked;
     final previous = _featureCache[QqMusicFeature.likedSongs];
+    // Prefer 我喜欢 row for songId when present; songType for songs is always
+    // entity kind 1 (1=歌曲 / 2=歌手 / 3=风格) — not track media Song.type.
+    var apiSong = song;
+    if (wasLiked) {
+      for (final item in previous?.items ?? const <QqMusicItem>[]) {
+        if (_sameSong(item, song)) {
+          apiSong = item;
+          break;
+        }
+      }
+    }
     _setSongLikedInMemory(song, !wasLiked);
     _statusMessage = wasLiked ? '已取消喜欢' : '已添加到我喜欢';
     _error = '';
     _isLoading = true;
     notifyListeners();
     try {
-      await api.setSongLiked(song, liked: !wasLiked);
+      await api.setSongLiked(apiSong, liked: !wasLiked);
     } catch (error) {
       if (previous == null) {
         _featureCache.remove(QqMusicFeature.likedSongs);
@@ -1566,7 +1608,7 @@ class QqMusicController extends ChangeNotifier {
       }
       notifyListeners();
       if (cacheFeature != QqMusicFeature.guessRecommendations) {
-        await _probePlayableUrls(loaded.items);
+        unawaited(_probePlayableUrls(loaded.items));
       }
     } catch (error) {
       _error = _message(error);
@@ -1673,8 +1715,7 @@ class QqMusicController extends ChangeNotifier {
       if (_error.isNotEmpty && _isTransientQrNetworkError(_error)) {
         _error = '';
       }
-      if (_statusMessage.contains('网络暂时') ||
-          _statusMessage.contains('已回到应用')) {
+      if (_statusMessage.contains('网络暂时') || _statusMessage.contains('已回到应用')) {
         _statusMessage = '';
       }
       if (status.done && api.isLoggedIn) {

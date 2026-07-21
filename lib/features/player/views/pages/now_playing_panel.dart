@@ -6,7 +6,6 @@ import 'package:flutter/scheduler.dart';
 import 'package:qqmusic_ipod/business/entities/music.dart';
 import 'package:qqmusic_ipod/core/theme/tokens/app_tokens.dart';
 import 'package:qqmusic_ipod/core/theme/widgets/artwork_image.dart';
-import 'package:qqmusic_ipod/core/theme/widgets/ipod_scrollbar.dart';
 import 'package:qqmusic_ipod/features/shell/models/ipod_models.dart';
 
 class NowPlayingPanel extends StatefulWidget {
@@ -144,30 +143,38 @@ class _NowPlayingPanelState extends State<NowPlayingPanel> {
                   ),
                 ),
                 SizedBox(height: titleGap),
-                Text(
-                  widget.album.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: titleSize,
-                    fontWeight: FontWeight.w800,
+                if (_showLyrics)
+                  _LyricsTrackMetadata(
+                    title: widget.album.title,
+                    artist: widget.album.artist,
+                    audioOutputName: widget.audioOutputName,
+                  )
+                else ...[
+                  Text(
+                    widget.album.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: titleSize,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
-                ),
-                SizedBox(height: tight ? 1 : 3),
-                Text(
-                  widget.album.artist,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: const Color(0x99FFFFFF),
-                    fontSize: artistSize,
-                    fontWeight: FontWeight.w500,
+                  SizedBox(height: tight ? 1 : 3),
+                  Text(
+                    widget.album.artist,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: const Color(0x99FFFFFF),
+                      fontSize: artistSize,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
-                ),
-                if (widget.audioOutputName.isNotEmpty) ...[
-                  SizedBox(height: tight ? 2 : (compact ? 4 : 8)),
-                  _AudioOutputPill(name: widget.audioOutputName),
+                  if (widget.audioOutputName.isNotEmpty) ...[
+                    SizedBox(height: tight ? 2 : (compact ? 4 : 8)),
+                    _AudioOutputPill(name: widget.audioOutputName),
+                  ],
                 ],
                 SizedBox(height: progressGap),
                 _PlayerProgressBar(
@@ -237,8 +244,7 @@ class _NowPlayingPanelState extends State<NowPlayingPanel> {
                     _ActionButton(
                       key: const ValueKey('player-mode-button'),
                       icon: switch (widget.playbackMode) {
-                        QqMusicPlaybackMode.sequential =>
-                          Icons.repeat_rounded,
+                        QqMusicPlaybackMode.sequential => Icons.repeat_rounded,
                         QqMusicPlaybackMode.repeatOne =>
                           Icons.repeat_one_rounded,
                         QqMusicPlaybackMode.shuffle => Icons.shuffle_rounded,
@@ -449,11 +455,7 @@ class _PlayerProgressPainter extends CustomPainter {
     // Flat played track — no vertical motion so the head never looks offset.
     final glow = Paint()
       ..shader = const LinearGradient(
-        colors: [
-          Color(0x668A4FFF),
-          Color(0x994A8CFF),
-          Color(0xB3E6CFFF),
-        ],
+        colors: [Color(0x668A4FFF), Color(0x994A8CFF), Color(0xB3E6CFFF)],
       ).createShader(Rect.fromLTRB(bounds.left, y - 4, endX, y + 4))
       ..strokeWidth = emphasized ? 4.2 : 3.4
       ..strokeCap = StrokeCap.round
@@ -462,11 +464,7 @@ class _PlayerProgressPainter extends CustomPainter {
 
     final core = Paint()
       ..shader = const LinearGradient(
-        colors: [
-          Color(0xFF8A4FFF),
-          Color(0xFF4A8CFF),
-          Color(0xFFE6CFFF),
-        ],
+        colors: [Color(0xFF8A4FFF), Color(0xFF4A8CFF), Color(0xFFE6CFFF)],
       ).createShader(Rect.fromLTRB(bounds.left, y - 2, endX, y + 2))
       ..strokeWidth = emphasized ? 2.6 : 2.15
       ..strokeCap = StrokeCap.round;
@@ -658,9 +656,7 @@ class _ArtworkView extends StatelessWidget {
           constraints.maxWidth * .72,
           constraints.maxHeight * .88,
         );
-        final size = available.isFinite
-            ? available.clamp(72.0, 220.0)
-            : 160.0;
+        final size = available.isFinite ? available.clamp(72.0, 220.0) : 160.0;
         return Align(
           alignment: const Alignment(0, .28),
           child: AnimatedContainer(
@@ -928,8 +924,9 @@ class _LyricsViewState extends State<_LyricsView>
         stops: [0, .14, .86, 1],
       ).createShader(bounds),
       blendMode: BlendMode.dstIn,
-      child: IpodScrollbar(
-        controller: _scrollController,
+      // No side scrollbar on lyrics — only the vertical fade mask above.
+      child: ScrollConfiguration(
+        behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
         child: ListView.builder(
           key: const ValueKey('lyrics-scroll-list'),
           controller: _scrollController,
@@ -953,6 +950,77 @@ class _LyricsViewState extends State<_LyricsView>
           },
         ),
       ),
+    );
+  }
+}
+
+class _LyricsTrackMetadata extends StatelessWidget {
+  const _LyricsTrackMetadata({
+    required this.title,
+    required this.artist,
+    required this.audioOutputName,
+  });
+
+  final String title;
+  final String artist;
+  final String audioOutputName;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Flexible(
+              child: Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.right,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  height: 1.1,
+                ),
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 7),
+              child: Text(
+                '·',
+                style: TextStyle(
+                  color: Color(0x66FFFFFF),
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            Flexible(
+              child: Text(
+                artist,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.left,
+                style: const TextStyle(
+                  color: Color(0xB3FFFFFF),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  height: 1.1,
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (audioOutputName.isNotEmpty) ...[
+          const SizedBox(height: 7),
+          _AudioOutputPill(name: audioOutputName),
+        ],
+      ],
     );
   }
 }
@@ -998,10 +1066,10 @@ class _AudioOutputPill extends StatelessWidget {
     final external = _isExternal;
     final accent = external
         ? const Color(0xFF31C27C)
-        : const Color(0x66FFFFFF);
+        : const Color(0x80FFFFFF);
     final textColor = external
-        ? const Color(0xCCFFFFFF)
-        : const Color(0x66FFFFFF);
+        ? const Color(0xD9FFFFFF)
+        : const Color(0x8FFFFFFF);
     return Align(
       alignment: Alignment.center,
       child: ConstrainedBox(
@@ -1017,7 +1085,7 @@ class _AudioOutputPill extends StatelessWidget {
             ),
           ),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -1025,7 +1093,7 @@ class _AudioOutputPill extends StatelessWidget {
                   external
                       ? Icons.bluetooth_audio_rounded
                       : Icons.speaker_rounded,
-                  size: 12,
+                  size: 13,
                   color: accent,
                 ),
                 const SizedBox(width: 5),
@@ -1117,7 +1185,7 @@ class _LyricLineText extends StatelessWidget {
   final int relativeIndex;
   final double lineTransition;
 
-  /// 0–1 progress by UTF-16 length so [TextSelection] offsets stay consistent.
+  /// First-commit (df3d87e) word progress: runes + intra-word linear fill.
   double get _wordProgress {
     if (!line.hasWordTimeline) {
       return 0;
@@ -1130,21 +1198,22 @@ class _LyricLineText extends StatelessWidget {
     }
     final totalLength = line.words.fold<int>(
       0,
-      (length, word) => length + word.text.length,
+      (length, word) => length + word.text.runes.length,
     );
     if (totalLength == 0) {
       return 0;
     }
     var completedLength = 0.0;
     for (final word in line.words) {
-      final wordLength = word.text.length;
+      final wordLength = word.text.runes.length;
       if (position >= word.endTime) {
         completedLength += wordLength;
         continue;
       }
       if (position > word.time && word.duration.inMilliseconds > 0) {
         final elapsed = position - word.time;
-        final progress = elapsed.inMilliseconds / word.duration.inMilliseconds;
+        final progress =
+            elapsed.inMilliseconds / word.duration.inMilliseconds;
         completedLength += wordLength * progress.clamp(0.0, 1.0);
       }
       break;
@@ -1168,14 +1237,14 @@ class _LyricLineText extends StatelessWidget {
         : previous
         ? 1.0 - .52 * leaving
         : distance == 1
-        ? .72
-        : .54;
+        ? .48
+        : .34;
     final offset = active
         ? Offset(0, .1 * (1 - entering))
         : previous
         ? Offset(0, -.1 * leaving)
         : Offset(0, relativeIndex < 0 ? -.1 : .1);
-    final baseStyle = TextStyle(
+    final style = TextStyle(
       color: line.hasWordTimeline && (active || previous)
           ? const Color(0x66FFFFFF)
           : Colors.white,
@@ -1184,7 +1253,20 @@ class _LyricLineText extends StatelessWidget {
       height: 1.15,
       letterSpacing: .15,
     );
+    Widget lyricText(
+      TextStyle resolvedStyle, {
+      double? highlightProgress,
+      Key? highlightKey,
+    }) {
+      return _LyricTextLayer(
+        text: line.text,
+        style: resolvedStyle,
+        highlightProgress: highlightProgress,
+        highlightKey: highlightKey,
+      );
+    }
 
+    // First-commit delayed reveal during line enter.
     final highlightReveal = active
         ? ((lineTransition - .18) / .37).clamp(0.0, 1.0)
         : previous
@@ -1196,43 +1278,34 @@ class _LyricLineText extends StatelessWidget {
         opacity: opacity,
         child: Transform.scale(
           scale: scale,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                if (active)
-                  const SizedBox.shrink(key: ValueKey('active-lyric-line')),
-                // Dim base + karaoke highlight share the same full-width box so
-                // glyph clip rects stay aligned when the lyric wraps.
-                SizedBox(
-                  width: double.infinity,
-                  child: Text(
-                    line.text,
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: baseStyle,
-                  ),
+          child: DefaultTextStyle(
+            style: style,
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    if (active)
+                      const SizedBox.shrink(key: ValueKey('active-lyric-line')),
+                    lyricText(const TextStyle()),
+                    if ((active || previous) && line.hasWordTimeline)
+                      Opacity(
+                        key: active
+                            ? const ValueKey('active-lyric-highlight-reveal')
+                            : null,
+                        opacity: highlightReveal,
+                        child: lyricText(
+                          style.copyWith(color: Colors.white),
+                          highlightProgress: _wordProgress,
+                          highlightKey: active
+                              ? const ValueKey('active-lyric-progress')
+                              : null,
+                        ),
+                      ),
+                  ],
                 ),
-                if ((active || previous) && line.hasWordTimeline)
-                  Opacity(
-                    key: active
-                        ? const ValueKey('active-lyric-highlight-reveal')
-                        : null,
-                    opacity: highlightReveal,
-                    child: _KaraokeLineHighlight(
-                      key: active
-                          ? const ValueKey('active-lyric-progress')
-                          : ValueKey(
-                              'lyric-highlight-${line.time.inMilliseconds}',
-                            ),
-                      text: line.text,
-                      style: baseStyle.copyWith(color: Colors.white),
-                      progress: _wordProgress,
-                    ),
-                  ),
-              ],
+              ),
             ),
           ),
         ),
@@ -1241,108 +1314,123 @@ class _LyricLineText extends StatelessWidget {
   }
 }
 
-/// Word-timed highlight that follows text layout, including wrapped lines.
-///
-/// A horizontal [ShaderMask] lights both visual rows from the left at once;
-/// this clips the bright layer to [TextPainter.getBoxesForSelection] so the
-/// second row stays dim until the character cursor reaches it.
-class _KaraokeLineHighlight extends StatelessWidget {
-  const _KaraokeLineHighlight({
+class _LyricTextLayer extends StatelessWidget {
+  const _LyricTextLayer({
     required this.text,
     required this.style,
-    required this.progress,
-    super.key,
+    this.highlightProgress,
+    this.highlightKey,
   });
 
   final String text;
   final TextStyle style;
-  final double progress;
+  final double? highlightProgress;
+  final Key? highlightKey;
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final maxWidth = constraints.maxWidth;
-        if (!maxWidth.isFinite || maxWidth <= 0) {
-          return const SizedBox.shrink();
-        }
-        final painter = TextPainter(
-          text: TextSpan(text: text, style: style),
+        final resolvedStyle = DefaultTextStyle.of(context).style.merge(style);
+        final textPainter = TextPainter(
+          text: TextSpan(text: text, style: resolvedStyle),
           textAlign: TextAlign.center,
-          textDirection: TextDirection.ltr,
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
           maxLines: 2,
           ellipsis: '…',
-        )..layout(maxWidth: maxWidth);
-
-        final value = progress.clamp(0.0, 1.0);
-        final path = _karaokeClipPath(painter, text, value);
-
-        return SizedBox(
-          width: maxWidth,
-          height: painter.height,
-          child: ClipPath(
-            clipper: _PathClipper(path),
-            child: Text(
-              text,
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: style,
-            ),
-          ),
+        )..layout(maxWidth: constraints.maxWidth);
+        final ranges = _visualLineRanges(textPainter, text);
+        final totalLength = text.runes.length;
+        final progress = highlightProgress?.clamp(0.0, 1.0).toDouble();
+        var rangeIndex = 0;
+        final children = <Widget>[];
+        for (final range in ranges) {
+          final lineText = text.substring(range.start, range.end);
+          final lineLength = lineText.runes.length;
+          final lineStart = text.substring(0, range.start).runes.length;
+          final lineProgress = totalLength == 0 || lineLength == 0
+              ? 0.0
+              : ((progress ?? 0) * totalLength - lineStart) / lineLength;
+          Widget child = Text(
+            lineText,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            softWrap: false,
+            style: style,
+          );
+          if (progress != null) {
+            child = ShaderMask(
+              key: rangeIndex == 0 ? highlightKey : null,
+              blendMode: BlendMode.dstIn,
+              shaderCallback: (bounds) =>
+                  _lyricProgressShader(bounds, lineProgress),
+              child: child,
+            );
+          }
+          children.add(child);
+          rangeIndex++;
+        }
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: children,
         );
       },
     );
   }
 }
 
-Path _karaokeClipPath(TextPainter painter, String text, double progress) {
-  final path = Path();
-  if (progress <= 0 || text.isEmpty) {
-    return path;
-  }
-  if (progress >= 1) {
-    path.addRect(Rect.fromLTWH(0, 0, painter.width, painter.height));
-    return path;
-  }
-
-  final exact = text.length * progress;
-  final solidEnd = exact.floor().clamp(0, text.length);
-  if (solidEnd > 0) {
-    for (final box in painter.getBoxesForSelection(
-      TextSelection(baseOffset: 0, extentOffset: solidEnd),
-    )) {
-      path.addRect(box.toRect());
+List<TextRange> _visualLineRanges(TextPainter painter, String text) {
+  final ranges = <TextRange>[];
+  var offset = 0;
+  for (final _ in painter.computeLineMetrics()) {
+    if (offset >= text.length) {
+      break;
     }
-  }
-
-  final fraction = exact - solidEnd;
-  if (fraction > 0.001 && solidEnd < text.length) {
-    final next = solidEnd + 1;
-    for (final box in painter.getBoxesForSelection(
-      TextSelection(baseOffset: solidEnd, extentOffset: next),
-    )) {
-      final rect = box.toRect();
-      final width = rect.width * fraction.clamp(0.0, 1.0);
-      if (width > 0) {
-        path.addRect(Rect.fromLTWH(rect.left, rect.top, width, rect.height));
-      }
+    final boundary = painter.getLineBoundary(TextPosition(offset: offset));
+    final boundaryEnd = boundary.end.clamp(offset + 1, text.length).toInt();
+    var lineEnd = boundaryEnd;
+    while (lineEnd > offset &&
+        (text.codeUnitAt(lineEnd - 1) == 10 ||
+            text.codeUnitAt(lineEnd - 1) == 13)) {
+      lineEnd--;
     }
+    if (lineEnd > offset) {
+      ranges.add(TextRange(start: offset, end: lineEnd));
+    }
+    offset = boundaryEnd;
   }
-  return path;
+  if (ranges.isEmpty && text.isNotEmpty) {
+    ranges.add(TextRange(start: 0, end: text.length));
+  }
+  return ranges;
 }
 
-class _PathClipper extends CustomClipper<Path> {
-  const _PathClipper(this.path);
-
-  final Path path;
-
-  @override
-  Path getClip(Size size) => path;
-
-  @override
-  bool shouldReclip(covariant _PathClipper oldClipper) =>
-      !identical(path, oldClipper.path);
+Shader _lyricProgressShader(Rect bounds, double progress) {
+  final value = progress.clamp(0.0, 1.0);
+  if (value <= 0) {
+    return const LinearGradient(
+      colors: [Colors.transparent, Colors.transparent],
+    ).createShader(bounds);
+  }
+  if (value >= 1) {
+    return const LinearGradient(
+      colors: [Colors.white, Colors.white],
+    ).createShader(bounds);
+  }
+  final softStart = (value - .055).clamp(0.0, 1.0);
+  final softEnd = (value + .018).clamp(0.0, 1.0);
+  return LinearGradient(
+    colors: const [
+      Colors.white,
+      Colors.white,
+      Color(0x00FFFFFF),
+      Color(0x00FFFFFF),
+    ],
+    stops: [0, softStart, softEnd, 1],
+  ).createShader(bounds);
 }
 
 const _timeStyle = TextStyle(

@@ -182,14 +182,16 @@ class ChassisInsets {
         );
 
       case DeviceTopCutoutFamily.island:
-        // Same as notch: equal top/side outer margin for concentric superellipse.
-        // Island clearance comes from residual top inside glass, not a thinner top band.
+        // Island sits a bit lower than a pure 8pt inset; keep top/side equal
+        // so the superellipse stays concentric with the physical display curve.
+        // Clearance for the island itself still comes from residual top in glass.
+        const islandOuter = 7.0;
         return ChassisInsets(
           family: family,
           rawTop: rawTop,
-          topOuter: _frameHorizontal,
+          topOuter: islandOuter,
           screenFrameTop: 0,
-          screenFrameHorizontal: _frameHorizontal,
+          screenFrameHorizontal: islandOuter,
           screenFrameBottom: 8,
           bezelTop: _defaultBezel,
           bezelHorizontal: _defaultBezel,

@@ -96,15 +96,9 @@ class QqMusicResponseParser {
     // Official GetPlayLyricInfo: crypt=1 ⇒ lyric/trans/roma are hex QRC cipher.
     // Prefer decrypted lyric, then fall back to plain qrc / lrc fields.
     var raw = _string(map['lyric']);
-    if (_int(map['crypt']) == 1 && raw.isNotEmpty) {
-      try {
-        raw = qrcDecrypt(raw);
-      } catch (_) {
-        // Keep ciphertext so later plain parsers still no-op cleanly.
-      }
-    }
+    raw = _maybeDecryptQrc(raw, crypt: _int(map['crypt']));
     if (raw.isEmpty) {
-      raw = _string(map['qrc']);
+      raw = _maybeDecryptQrc(_string(map['qrc']), crypt: _int(map['crypt']));
     }
     if (raw.isEmpty) {
       raw = _string(map['lrc']);
@@ -117,21 +111,44 @@ class QqMusicResponseParser {
     return QqMusicLyrics(lines: List.unmodifiable(_parseLrcLyrics(raw)));
   }
 
+  /// Decrypt hex QRC when the payload is still ciphertext.
+  String _maybeDecryptQrc(String raw, {required int crypt}) {
+    if (raw.isEmpty) {
+      return raw;
+    }
+    final trimmed = raw.trim();
+    final looksHex =
+        trimmed.length >= 32 &&
+        trimmed.length.isEven &&
+        RegExp(r'^[0-9a-fA-F]+$').hasMatch(trimmed);
+    if (crypt == 1 || looksHex) {
+      try {
+        return qrcDecrypt(trimmed);
+      } catch (_) {
+        // Keep ciphertext so later plain parsers still no-op cleanly.
+      }
+    }
+    return raw;
+  }
+
   String _decodeLyric(String raw) {
     var decoded = raw;
     // Hex QRC already decrypted above; still try base64 for older plain payloads.
     if (decoded.isNotEmpty &&
         !decoded.contains('[') &&
-        !decoded.contains('<Lyric_1') &&
+        !decoded.contains('<Lyric') &&
         !RegExp(r'^[0-9a-fA-F]+$').hasMatch(decoded.trim())) {
       try {
         decoded = utf8.decode(base64Decode(decoded));
       } catch (_) {}
     }
-    final content = RegExp(
-      'LyricContent="([\\s\\S]*?)"',
-    ).firstMatch(decoded)?.group(1);
+    final content =
+        RegExp('LyricContent="([\\s\\S]*?)"').firstMatch(decoded)?.group(1) ??
+        RegExp("LyricContent='([\\s\\S]*?)'").firstMatch(decoded)?.group(1);
     return (content ?? decoded)
+        // Escaped newlines appear inside LyricContent="..." payloads.
+        .replaceAll(r'\n', '\n')
+        .replaceAll(r'\r', '\r')
         .replaceAll('&#10;', '\n')
         .replaceAll('&#13;', '\r')
         .replaceAll('&quot;', '"')
@@ -142,9 +159,12 @@ class QqMusicResponseParser {
   }
 
   List<QqMusicLyricLine> _parseQrcLyrics(String raw) {
+    // First-commit timing: word times used as-is (song clock), no +lineStart.
+    // Tokenization uses stamp boundaries so timed literal parentheses still parse
+    // (the original ([^()]*) regex dropped them).
     final lines = <QqMusicLyricLine>[];
     final linePattern = RegExp(r'^\[(\d+),(\d+)\](.*)$');
-    final wordPattern = RegExp(r'([^()]*)\((\d+),(\d+)\)');
+    final stampPattern = RegExp(r'\((\d+),(\d+)(?:,\d+)?\)');
     for (final sourceLine in const LineSplitter().convert(raw)) {
       final lineMatch = linePattern.firstMatch(sourceLine.trim());
       if (lineMatch == null) {
@@ -152,17 +172,21 @@ class QqMusicResponseParser {
       }
       final lineStart = int.parse(lineMatch.group(1)!);
       final lineDuration = int.parse(lineMatch.group(2)!);
+      final body = lineMatch.group(3)!;
       final words = <QqMusicLyricWord>[];
-      for (final match in wordPattern.allMatches(lineMatch.group(3)!)) {
-        final text = match.group(1) ?? '';
+      var cursor = 0;
+      for (final match in stampPattern.allMatches(body)) {
+        final text = body.substring(cursor, match.start);
+        cursor = match.end;
         if (text.isEmpty || text == '\r') {
           continue;
         }
+        final durationMs = int.parse(match.group(2)!);
         words.add(
           QqMusicLyricWord(
             text: text,
-            time: Duration(milliseconds: int.parse(match.group(2)!)),
-            duration: Duration(milliseconds: int.parse(match.group(3)!)),
+            time: Duration(milliseconds: int.parse(match.group(1)!)),
+            duration: Duration(milliseconds: durationMs <= 0 ? 1 : durationMs),
           ),
         );
       }
@@ -212,7 +236,9 @@ class QqMusicResponseParser {
   }
 
   QqMusicItem parseSongDetail(Object? data) {
-    return parseSong(_map(data)['track']);
+    final map = _map(data);
+    final track = map['track'] ?? map['track_info'] ?? data;
+    return parseSong(track);
   }
 
   QqMusicItem parseSong(Object? value) {
@@ -239,11 +265,11 @@ class QqMusicResponseParser {
       imageUrl: albumMid.isEmpty ? '' : _albumCover(albumMid),
       type: QqMusicItemType.song,
       duration: Duration(seconds: _int(song['interval'])),
-      // Playlist write ops need the official song type (1 = normal track).
+      // Keep official Song.type as-is (including 0). DelSonglist matches the
+      // stored type exactly — coercing 0→1 here makes unlike no-op.
       songType: _nullableInt(
-            song['type'] ?? song['songtype'] ?? song['song_type'],
-          ) ??
-          1,
+        song['type'] ?? song['songtype'] ?? song['song_type'],
+      ),
       requiresVip: _int(pay['pay_play']) != 0,
       isCopyrightRestricted: _isCopyrightRestricted(file),
     );
@@ -621,13 +647,11 @@ class QqMusicResponseParser {
     final miscellany = _map(card['miscellany']);
 
     if (type == 200 || jumpType == 10046) {
-      final songMid = subId.isNotEmpty ? subId : _string(miscellany['vid']);
-      if (id.isEmpty && songMid.isEmpty) {
+      if (id.isEmpty) {
         return null;
       }
       return QqMusicItem(
-        id: id.isEmpty ? songMid : id,
-        mid: songMid,
+        id: id,
         title: title,
         subtitle: subtitle,
         imageUrl: cover,

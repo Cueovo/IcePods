@@ -112,8 +112,10 @@ class _FeaturePanelState extends State<FeaturePanel> {
     if (feature == QqMusicFeature.account) {
       return AccountView(controller: widget.controller);
     }
+    // Match HomePanel top inset (0) so feature pages sit under the status
+    // bar the same distance as the menu — not an extra 12pt lower.
     return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 12, 18, 14),
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

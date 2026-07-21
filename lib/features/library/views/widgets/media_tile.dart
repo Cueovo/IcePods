@@ -135,7 +135,10 @@ class MediaTile extends StatelessWidget {
                             ),
                           ),
                         ),
-                      ] else if (item.isSong && unavailable) ...[
+                      ] else if (item.isSong &&
+                          unavailable &&
+                          !item.requiresVip &&
+                          !item.isCopyrightRestricted) ...[
                         const SizedBox(width: 5),
                         Container(
                           key: ValueKey('unavailable-badge-${item.id}'),

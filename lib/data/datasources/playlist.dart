@@ -48,27 +48,23 @@ class QqMusicPlaylistModule {
     if (valid.isEmpty) {
       throw StateError('没有可操作的歌曲');
     }
-    // Match qqmusic-web songlist.add_songs / del_songs (dirid=201 for like):
-    // - AddSonglist keeps bFmtUtf8 as bool (preserveBool).
-    // - DelSonglist encodes bools as 0/1 (default CGI path).
-    // songType: normal tracks are type 1; 0 often no-ops the delete.
+    // Match working DelSonglist clients (dirid=201 for 我喜欢):
+    // param = { dirId, v_songInfo: [{ songId, songType: 0 }] }
+    // No tid / bFmtUtf8; songType is fixed 0 for song rows.
     final data = await client.request(
       QqMusicCgiRequest(
         module: 'music.musicasset.PlaylistDetailWrite',
         method: add ? 'AddSonglist' : 'DelSonglist',
         param: {
           'dirId': int.tryParse(directoryId) ?? 0,
-          'tid': 0,
-          'bFmtUtf8': true,
           'v_songInfo': [
             for (final song in valid)
               {
                 'songId': int.parse(song.id),
-                'songType': song.songType ?? 1,
+                'songType': 0,
               },
           ],
         },
-        preserveBool: add,
       ),
       credential: credential,
       platform: QqMusicRequestPlatform.android,

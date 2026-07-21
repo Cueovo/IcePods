@@ -15,7 +15,8 @@ class AccountView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 10, 18, 14),
+      // Align with HomePanel / FeaturePanel shell padding.
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

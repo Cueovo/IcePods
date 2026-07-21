@@ -68,7 +68,10 @@ class QqMusicRecommendModule {
       QqMusicFeature.homeFeed => {
         ...data,
         'shelves': [
-          for (final value in _list(data['shelves'] ?? data['v_shelf']))
+          for (final value in _firstNonEmptyList(
+            data['shelves'],
+            data['v_shelf'],
+          ))
             _homeShelf(value),
         ],
       },
@@ -101,7 +104,7 @@ class QqMusicRecommendModule {
     return {
       ...shelf,
       'niches': [
-        for (final raw in _list(shelf['niches'] ?? shelf['v_niche']))
+        for (final raw in _firstNonEmptyList(shelf['niches'], shelf['v_niche']))
           _homeNiche(raw),
       ],
     };
@@ -109,7 +112,10 @@ class QqMusicRecommendModule {
 
   Map<String, dynamic> _homeNiche(Object? value) {
     final niche = _map(value);
-    return {...niche, 'cards': niche['cards'] ?? niche['v_card'] ?? const []};
+    return {
+      ...niche,
+      'cards': _firstNonEmptyList(niche['cards'], niche['v_card']),
+    };
   }
 
   Map<String, dynamic> _playlistBasic(Object? value) {
@@ -127,5 +133,10 @@ class QqMusicRecommendModule {
 
 Map<String, dynamic> _map(Object? value) =>
     value is Map ? Map<String, dynamic>.from(value) : const {};
+
+List<dynamic> _firstNonEmptyList(Object? primary, Object? fallback) {
+  final primaryList = _list(primary);
+  return primaryList.isNotEmpty ? primaryList : _list(fallback);
+}
 
 List<dynamic> _list(Object? value) => value is List ? value : const [];

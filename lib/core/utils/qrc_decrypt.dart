@@ -343,8 +343,26 @@ String qrcDecrypt(String encryptedQrc) {
   for (var i = 0; i + 8 <= encryptedBytes.length; i += 8) {
     decrypted.add(_tripledesCrypt(encryptedBytes.sublist(i, i + 8), schedule));
   }
-  final inflated = const ZLibDecoder().decodeBytes(decrypted.takeBytes());
-  return utf8.decode(inflated);
+  final plain = _zlibDecompress(decrypted.takeBytes());
+  return utf8.decode(plain);
+}
+
+/// Inflate zlib payload; tolerate trailing PKCS/zero padding after the stream.
+Uint8List _zlibDecompress(Uint8List data) {
+  try {
+    return Uint8List.fromList(const ZLibDecoder().decodeBytes(data));
+  } catch (_) {
+    // Official cipher blocks may leave a few padding bytes after the zlib
+    // stream; trim from the end until inflate succeeds.
+    for (var end = data.length - 1; end > 8; end--) {
+      try {
+        return Uint8List.fromList(
+          const ZLibDecoder().decodeBytes(data.sublist(0, end)),
+        );
+      } catch (_) {}
+    }
+    rethrow;
+  }
 }
 
 Uint8List _hexToBytes(String hex) {
