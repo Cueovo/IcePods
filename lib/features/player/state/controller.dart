@@ -174,6 +174,7 @@ class QqMusicController extends ChangeNotifier {
   bool _loadingMore = false;
   bool _handlingPlaybackCompletion = false;
   bool _switchingTrack = false;
+  bool _radarPlayPending = false;
   bool _loadingAudioSource = false;
   bool _recoveringSourceError = false;
   bool _playbackRequested = false;
@@ -480,33 +481,59 @@ class QqMusicController extends ChangeNotifier {
   }
 
   Future<bool> _startRadarPlayback() async {
-    final stationItems = items;
-    if (stationItems.isEmpty) {
+    if (_switchingTrack) {
+      _radarPlayPending = true;
       return false;
     }
-    final initialIndex = _selectedIndex.clamp(0, stationItems.length - 1);
-    for (var offset = 0; offset < stationItems.length; offset++) {
-      final index = (initialIndex + offset) % stationItems.length;
-      final song = stationItems[index];
-      if (!song.isSong ||
-          _shouldBlockVipPlayback(song) ||
-          song.isCopyrightRestricted ||
-          isUnavailable(song)) {
-        continue;
-      }
-      _selectedIndex = index;
-      notifyListeners();
-      if (isCurrentSong(song)) {
-        if (!isPlaying) {
-          await _startPlayback();
+    if (items.isEmpty) {
+      return false;
+    }
+    _switchingTrack = true;
+    var played = false;
+    try {
+      do {
+        _radarPlayPending = false;
+        final stationItems = items;
+        if (stationItems.isEmpty) {
+          played = false;
+          break;
         }
-        return true;
-      }
-      if (await play(song, queue: stationItems)) {
-        return true;
+        final initialIndex = _selectedIndex.clamp(0, stationItems.length - 1);
+        played = false;
+        for (var offset = 0; offset < stationItems.length; offset++) {
+          final index = (initialIndex + offset) % stationItems.length;
+          final song = stationItems[index];
+          if (!song.isSong ||
+              _shouldBlockVipPlayback(song) ||
+              song.isCopyrightRestricted ||
+              isUnavailable(song)) {
+            continue;
+          }
+          if (_selectedIndex != index) {
+            _selectedIndex = index;
+            notifyListeners();
+          }
+          if (isCurrentSong(song)) {
+            if (!isPlaying) {
+              await _startPlayback();
+            }
+            played = true;
+            break;
+          }
+          if (await play(song, queue: List.unmodifiable(stationItems))) {
+            played = true;
+            break;
+          }
+        }
+      } while (_radarPlayPending);
+      return played;
+    } finally {
+      _switchingTrack = false;
+      if (_radarPlayPending) {
+        _radarPlayPending = false;
+        unawaited(_startRadarPlayback());
       }
     }
-    return false;
   }
 
   Future<void> search(String keyword) async {
@@ -676,6 +703,10 @@ class QqMusicController extends ChangeNotifier {
     if (items.isEmpty) {
       return;
     }
+    if (_entry?.feature == QqMusicFeature.radar) {
+      unawaited(_stepRadarSelection(direction));
+      return;
+    }
     final next = (_selectedIndex + direction).clamp(0, items.length - 1);
     if (next != _selectedIndex) {
       _selectedIndex = next;
@@ -684,6 +715,23 @@ class QqMusicController extends ChangeNotifier {
     } else if (direction > 0) {
       unawaited(_maybeLoadMore());
     }
+  }
+
+  Future<void> _stepRadarSelection(int direction) async {
+    if (items.isEmpty) {
+      return;
+    }
+    final next = (_selectedIndex + direction).clamp(0, items.length - 1);
+    if (next == _selectedIndex) {
+      if (direction > 0) {
+        await _maybeLoadMore();
+      }
+      return;
+    }
+    _selectedIndex = next;
+    notifyListeners();
+    unawaited(_maybeLoadMore());
+    await _startRadarPlayback();
   }
 
   Future<void> _maybeLoadMore() async {
