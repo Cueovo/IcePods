@@ -110,9 +110,14 @@ class _IpodShellView extends StatelessWidget {
     final media = MediaQuery.of(context);
     // Outer / bezel adapt so punch-holes sit inside the top bezel band.
     final chassisInsets = ChassisInsets.resolve(media);
-    // Framed display with iOS continuous-corner (superellipse) curvature —
-    // same radius on all four corners for a uniform glass panel.
-    final r = theme.screenBottomRadius;
+    // Framed display with continuous-corner (superellipse) curvature.
+    // iOS: match physical device corner (concentric with phone bezel).
+    // Android / other: keep themed iPod panel radius.
+    final r = ScreenCornerRadius.outerFrame(
+      mq: media,
+      insets: chassisInsets,
+      fallback: theme.screenBottomRadius,
+    );
     final outerRadius = BorderRadius.circular(r);
     // Dual frame: thin highlight strokes + a wider bezel band between them
     // (the gap is what reads as "thicker border", not the stroke width).

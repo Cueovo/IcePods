@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 /// Top cutout / status chrome family for chassis layout.
@@ -177,10 +178,11 @@ class ChassisInsets {
         );
 
       case DeviceTopCutoutFamily.island:
+        // A few px lower than notch so the white rim clears the island.
         return ChassisInsets(
           family: family,
           rawTop: rawTop,
-          topOuter: 4,
+          topOuter: 6,
           screenFrameTop: 0,
           screenFrameHorizontal: _frameHorizontal,
           screenFrameBottom: 8,
@@ -217,5 +219,81 @@ class ChassisInsets {
   static bool _looksLikeIslandWidth(double width) {
     return const [393, 402, 420, 430, 440]
         .any((candidate) => (width - candidate).abs() < 1);
+  }
+}
+
+/// iOS display-corner matching for the simulated screen module.
+///
+/// On iPhone the physical bezel is a continuous (squircle) curve. The framed
+/// glass sits inset from that edge; its outer radius should be concentric:
+/// `deviceCorner − horizontalMargin`. Android keeps the themed iPod radius.
+class ScreenCornerRadius {
+  const ScreenCornerRadius._();
+
+  /// Outer [RoundedSuperellipseBorder] radius for the white-rim screen frame.
+  static double outerFrame({
+    required MediaQueryData mq,
+    required ChassisInsets insets,
+    required double fallback,
+    TargetPlatform? platform,
+  }) {
+    final target = platform ?? defaultTargetPlatform;
+    if (target != TargetPlatform.iOS) {
+      return fallback;
+    }
+    final device = deviceDisplayCorner(mq: mq, family: insets.family);
+    if (device <= 0) {
+      // Classic flat-top SE: keep the designed iPod panel radius.
+      return fallback;
+    }
+    final margin = insets.screenFrameHorizontal;
+    final concentric = device - margin;
+    // Never inflate past the physical device curve; floor so the panel
+    // still reads as rounded if margins were unusually large.
+    return concentric.clamp(20.0, device);
+  }
+
+  /// Known iPhone display corner radii (logical points), by short side + family.
+  ///
+  /// Sources: community measurements of `UIScreen._displayCornerRadius` /
+  /// public design references — not a private API call at runtime.
+  static double deviceDisplayCorner({
+    required MediaQueryData mq,
+    required DeviceTopCutoutFamily family,
+  }) {
+    final w = mq.size.width;
+    final h = mq.size.height;
+    final short = w < h ? w : h;
+
+    switch (family) {
+      case DeviceTopCutoutFamily.classic:
+        // Home-button SE / 8: square glass, no continuous device curve to match.
+        return 0;
+
+      case DeviceTopCutoutFamily.notch:
+        // X / XS / 11 Pro ≈ 39; XR / 11 ≈ 41.5; 12–14 / mini ≈ 47.33;
+        // 12–13 Pro Max / 14 Plus ≈ 53.33.
+        if (short >= 428) return 53.33;
+        if ((short - 414).abs() < 1) {
+          // XR / 11 (414×896) ≈ 41.5; XS Max / 11 Pro Max ≈ 39.
+          final long = w > h ? w : h;
+          return long >= 890 ? 39.0 : 41.5;
+        }
+        if (short >= 390) return 47.33;
+        // 375-wide: X / XS / 11 Pro / 12–13 mini.
+        final rawTop =
+            mq.viewPadding.top > 0 ? mq.viewPadding.top : mq.padding.top;
+        // Pre-12 status band ~44; 12+ mini ~50.
+        if (rawTop >= 47) return 47.33;
+        return 39.0;
+
+      case DeviceTopCutoutFamily.island:
+        // 14 Pro / 15 / 16 family continuous corners ≈ 55pt.
+        return 55.0;
+
+      case DeviceTopCutoutFamily.statusBar:
+        // Not an iPhone cutout profile; no device match.
+        return 0;
+    }
   }
 }

@@ -138,14 +138,14 @@ class _IpodStatusBarState extends State<IpodStatusBar> {
             MediaQuery.of(context),
             constraints.maxWidth,
           );
-          // Larger clock with a slightly heavier weight so it holds against ambient.
+          // Bold clock so it holds against ambient / glass gradients.
           final timeWidget = Text(
             time,
             key: const ValueKey('ipod-status-time'),
             style: TextStyle(
               color: const Color(0xF2FFFFFF),
               fontSize: metrics.timeSize,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w700,
               letterSpacing: 0.2,
               height: 1,
               fontFeatures: const [FontFeature.tabularFigures()],
@@ -318,7 +318,9 @@ class _IosStatusBarMetrics {
               effectiveWidth - _notchRightInset(effectiveWidth),
           contentCenterY: _notchCenterY(rawTop),
           contentHeight: 20,
-          iconSize: 15,
+          // Material glyphs have internal padding — size ≈ battery height
+          // so signal/wifi reads the same visual weight as the capsule.
+          iconSize: 18,
           timeSize: 16,
           batteryWidth: 32,
           batteryHeight: 15,
@@ -339,7 +341,7 @@ class _IosStatusBarMetrics {
               effectiveWidth - _dynamicIslandRightInset(effectiveWidth),
           contentCenterY: isNewPro ? 32.5 : 29.5,
           contentHeight: 20,
-          iconSize: 15,
+          iconSize: 18,
           timeSize: 16,
           batteryWidth: 32,
           batteryHeight: 15,
@@ -373,7 +375,7 @@ class _IosStatusBarMetrics {
       trailingContentRight: width - rightInset,
       contentCenterY: bar / 2,
       contentHeight: (bar * 0.72).clamp(14.0, 18.0),
-      iconSize: 14,
+      iconSize: 17,
       timeSize: 15,
       batteryWidth: 30,
       batteryHeight: 14,
