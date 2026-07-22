@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:audio_service/audio_service.dart';
+import 'package:audio_session/audio_session.dart';
+import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 
 import 'package:qqmusic_ipod/business/entities/music.dart';
@@ -59,6 +61,13 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
   Future<void> play() async {
     if (player.processingState == ProcessingState.completed) {
       await player.seek(Duration.zero);
+    }
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+      final session = await AudioSession.instance;
+      await session.configure(const AudioSessionConfiguration.music());
+      if (!await session.setActive(true)) {
+        return;
+      }
     }
     _broadcastOptimisticState(true);
     unawaited(player.play());
