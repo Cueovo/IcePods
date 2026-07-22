@@ -1,6 +1,4 @@
-import AVFoundation
 import Flutter
-import MediaPlayer
 import UIKit
 
 @main
@@ -25,33 +23,6 @@ import UIKit
       switch call.method {
       case "displayCornerRadius":
         result(Self.displayCornerRadius())
-      case "setNowPlayingPlaybackState":
-        guard #available(iOS 13.0, *), let state = call.arguments as? String else {
-          result(nil)
-          return
-        }
-        switch state {
-        case "playing":
-          let session = AVAudioSession.sharedInstance()
-          try? session.setCategory(.playback, mode: .default)
-          try? session.setActive(true)
-          UIApplication.shared.beginReceivingRemoteControlEvents()
-          MPNowPlayingInfoCenter.default().playbackState = .playing
-        case "paused":
-          UIApplication.shared.beginReceivingRemoteControlEvents()
-          MPNowPlayingInfoCenter.default().playbackState = .paused
-        case "stopped":
-          MPNowPlayingInfoCenter.default().playbackState = .stopped
-          UIApplication.shared.endReceivingRemoteControlEvents()
-        default:
-          result(FlutterError(
-            code: "invalid_now_playing_state",
-            message: "Unsupported Now Playing playback state: \(state)",
-            details: nil
-          ))
-          return
-        }
-        result(nil)
       default:
         result(FlutterMethodNotImplemented)
       }

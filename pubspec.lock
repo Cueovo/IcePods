@@ -28,10 +28,11 @@ packages:
   audio_service:
     dependency: "direct main"
     description:
-      name: audio_service
-      sha256: "95f3267f3449eb5cf71c8fcf1d556f57af1e898e2dc5815fb168d1843653edb7"
-      url: "https://pub.dev"
-    source: hosted
+      path: audio_service
+      ref: "0c81360dad3039bb41b48becb727f9bc03ba3198"
+      resolved-ref: "0c81360dad3039bb41b48becb727f9bc03ba3198"
+      url: "https://github.com/ryanheise/audio_service.git"
+    source: git
     version: "0.18.19"
   audio_service_platform_interface:
     dependency: transitive
