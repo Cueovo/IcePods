@@ -11,12 +11,14 @@ class IpodStatusBar extends StatefulWidget {
   State<IpodStatusBar> createState() => _IpodStatusBarState();
 }
 
-class _IpodStatusBarState extends State<IpodStatusBar> {
+class _IpodStatusBarState extends State<IpodStatusBar>
+    with WidgetsBindingObserver {
   final Battery _battery = Battery();
   final Connectivity _connectivity = Connectivity();
 
   late DateTime _now;
   Timer? _clockTimer;
+  Timer? _batteryPollTimer;
   StreamSubscription<BatteryState>? _batteryStateSub;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
 
@@ -24,16 +26,22 @@ class _IpodStatusBarState extends State<IpodStatusBar> {
   BatteryState _batteryState = BatteryState.unknown;
   List<ConnectivityResult> _networkResults = const [ConnectivityResult.none];
 
+  /// iOS/Android do not push battery *percentage* changes; only charge state
+  /// changes. Poll periodically so the icon stays in sync while discharging.
+  static const _batteryPollInterval = Duration(seconds: 30);
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _now = DateTime.now();
-    _clockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) {
-        setState(() => _now = DateTime.now());
-      }
-    });
+    // Clock is HH:mm only — no need to rebuild every second.
+    _scheduleMinuteClock();
     unawaited(_loadSystemStatus());
+    _batteryPollTimer = Timer.periodic(_batteryPollInterval, (_) {
+      unawaited(_refreshBatteryLevel());
+      unawaited(_refreshBatteryState());
+    });
     _batteryStateSub = _battery.onBatteryStateChanged.listen((state) {
       if (!mounted) {
         return;
@@ -47,6 +55,43 @@ class _IpodStatusBarState extends State<IpodStatusBar> {
       }
       setState(() => _networkResults = results);
     });
+  }
+
+  /// Align updates to the next wall-clock minute, then tick once per minute.
+  void _scheduleMinuteClock() {
+    _clockTimer?.cancel();
+    final now = DateTime.now();
+    final nextMinute = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      now.hour,
+      now.minute,
+    ).add(const Duration(minutes: 1));
+    final delay = nextMinute.difference(now);
+    _clockTimer = Timer(delay, () {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _now = DateTime.now());
+      _clockTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+        if (mounted) {
+          setState(() => _now = DateTime.now());
+        }
+      });
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      if (mounted) {
+        setState(() => _now = DateTime.now());
+      }
+      // Reschedule so we stay aligned after background suspension.
+      _scheduleMinuteClock();
+      unawaited(_loadSystemStatus());
+    }
   }
 
   Future<void> _loadSystemStatus() async {
@@ -95,7 +140,9 @@ class _IpodStatusBarState extends State<IpodStatusBar> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _clockTimer?.cancel();
+    _batteryPollTimer?.cancel();
     unawaited(_batteryStateSub?.cancel() ?? Future<void>.value());
     unawaited(_connectivitySub?.cancel() ?? Future<void>.value());
     super.dispose();
@@ -145,7 +192,7 @@ class _IpodStatusBarState extends State<IpodStatusBar> {
             style: TextStyle(
               color: const Color(0xF2FFFFFF),
               fontSize: metrics.timeSize,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w800,
               letterSpacing: 0.2,
               height: 1,
               fontFeatures: const [FontFeature.tabularFigures()],

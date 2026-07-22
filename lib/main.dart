@@ -79,10 +79,31 @@ class MyApp extends StatelessWidget {
           error: AppColors.error,
           surface: AppColors.surface,
         ),
-        textTheme: const TextTheme(
+        // Bolder defaults so Material widgets inherit weight without per-TextStyle.
+        textTheme: Typography.whiteMountainView.copyWith(
+          displayLarge: AppTextStyles.title.copyWith(fontSize: 57),
+          displayMedium: AppTextStyles.title.copyWith(fontSize: 45),
+          displaySmall: AppTextStyles.title.copyWith(fontSize: 36),
+          headlineLarge: AppTextStyles.title.copyWith(fontSize: 32),
+          headlineMedium: AppTextStyles.title.copyWith(fontSize: 28),
+          headlineSmall: AppTextStyles.title.copyWith(fontSize: 24),
           titleLarge: AppTextStyles.title,
+          titleMedium: AppTextStyles.body.copyWith(
+            fontSize: 16,
+            fontWeight: AppTextStyles.strong,
+          ),
+          titleSmall: AppTextStyles.body.copyWith(
+            fontSize: 14,
+            fontWeight: AppTextStyles.strong,
+          ),
+          bodyLarge: AppTextStyles.body.copyWith(fontSize: 15),
           bodyMedium: AppTextStyles.body,
           bodySmall: AppTextStyles.caption,
+          labelLarge: AppTextStyles.body.copyWith(
+            fontWeight: AppTextStyles.strong,
+          ),
+          labelMedium: AppTextStyles.caption.copyWith(fontSize: 12),
+          labelSmall: AppTextStyles.caption,
         ),
         cardTheme: CardThemeData(
           color: AppColors.surface,

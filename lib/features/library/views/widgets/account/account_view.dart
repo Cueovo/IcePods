@@ -1,4 +1,4 @@
-import 'dart:typed_data';
+﻿import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -16,7 +16,7 @@ class AccountView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       // Align with HomePanel / FeaturePanel shell padding.
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -35,7 +35,7 @@ class AccountView extends StatelessWidget {
             style: const TextStyle(
               color: Color(0x80FFFFFF),
               fontSize: 12,
-              fontWeight: FontWeight.w500,
+              fontWeight: FontWeight.w700,
             ),
           ),
           const SizedBox(height: 14),
@@ -177,7 +177,7 @@ class AccountView extends StatelessWidget {
                                 style: const TextStyle(
                                   color: Color(0x99FFFFFF),
                                   fontSize: 12,
-                                  fontWeight: FontWeight.w500,
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
                               if (controller.statusMessage.isNotEmpty) ...[
@@ -188,7 +188,7 @@ class AccountView extends StatelessWidget {
                                   style: const TextStyle(
                                     color: Color(0xB3FFFFFF),
                                     fontSize: 11,
-                                    fontWeight: FontWeight.w500,
+                                    fontWeight: FontWeight.w700,
                                   ),
                                 ),
                               ],
@@ -271,7 +271,7 @@ class _LoginTypeTab extends StatelessWidget {
                 style: TextStyle(
                   color: selected ? Colors.white : const Color(0x99FFFFFF),
                   fontSize: 12,
-                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  fontWeight: selected ? FontWeight.w800 : FontWeight.w700,
                 ),
               ),
             ],

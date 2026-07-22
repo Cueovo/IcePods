@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import 'package:qqmusic_ipod/business/entities/music.dart';
 import 'package:qqmusic_ipod/core/theme/tokens/app_tokens.dart';
@@ -104,8 +104,8 @@ class MediaTile extends StatelessWidget {
                                 : const Color(0xCCFFFFFF),
                             fontSize: 13,
                             fontWeight: selected || current
-                                ? FontWeight.w700
-                                : FontWeight.w600,
+                                ? FontWeight.w800
+                                : FontWeight.w700,
                           ),
                         ),
                       ),
@@ -202,6 +202,7 @@ class MediaTile extends StatelessWidget {
                       style: const TextStyle(
                         color: Color(0x70FFFFFF),
                         fontSize: 10,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ],

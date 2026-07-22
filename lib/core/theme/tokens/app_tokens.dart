@@ -39,24 +39,29 @@ abstract final class AppCurves {
 }
 
 abstract final class AppTextStyles {
+  /// Default body weight for the glass UI — prefer bold over light on OLED.
+  static const FontWeight regular = FontWeight.w700;
+  static const FontWeight strong = FontWeight.w800;
+  static const FontWeight heavy = FontWeight.w900;
+
   static const caption = TextStyle(
     color: AppColors.textMuted,
     fontSize: 10,
-    fontWeight: FontWeight.w600,
+    fontWeight: regular,
   );
   static const metadata = TextStyle(
     color: AppColors.textSecondary,
     fontSize: 10,
-    fontWeight: FontWeight.w600,
+    fontWeight: regular,
   );
   static const body = TextStyle(
     color: AppColors.textPrimary,
     fontSize: 13,
-    fontWeight: FontWeight.w600,
+    fontWeight: regular,
   );
   static const title = TextStyle(
     color: AppColors.textPrimary,
     fontSize: 20,
-    fontWeight: FontWeight.w800,
+    fontWeight: strong,
   );
 }

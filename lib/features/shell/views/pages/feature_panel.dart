@@ -114,8 +114,12 @@ class _FeaturePanelState extends State<FeaturePanel> {
     }
     // Match HomePanel top inset (0) so feature pages sit under the status
     // bar the same distance as the menu — not an extra 12pt lower.
+    // Bottom inset is small; list content padding clears the glass curve.
+    // Status / error float over the list so they never permanently shrink it.
+    final hasPlaybackError = widget.controller.playbackError.isNotEmpty;
+    final hasStatus = widget.controller.statusMessage.isNotEmpty;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -142,35 +146,41 @@ class _FeaturePanelState extends State<FeaturePanel> {
             ),
           ],
           const SizedBox(height: 10),
-          Expanded(child: _buildBody()),
-          if (widget.controller.playbackError.isNotEmpty) ...[
-            const SizedBox(height: 5),
-            Text(
-              widget.controller.playbackError,
-              key: const ValueKey('playback-error'),
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Color(0xFFFFA8A8),
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-              ),
+          Expanded(
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Positioned.fill(child: _buildBody()),
+                if (hasPlaybackError || hasStatus)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 6,
+                    child: IgnorePointer(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (hasPlaybackError)
+                            _FloatingStatusChip(
+                              key: const ValueKey('playback-error'),
+                              text: widget.controller.playbackError,
+                              color: const Color(0xFFFFA8A8),
+                            ),
+                          if (hasPlaybackError && hasStatus)
+                            const SizedBox(height: 4),
+                          if (hasStatus)
+                            _FloatingStatusChip(
+                              key: const ValueKey('api-action-status'),
+                              text: widget.controller.statusMessage,
+                              color: const Color(0xFF8DE5B9),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
             ),
-          ],
-          if (widget.controller.statusMessage.isNotEmpty) ...[
-            const SizedBox(height: 5),
-            Text(
-              widget.controller.statusMessage,
-              key: const ValueKey('api-action-status'),
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Color(0xFF8DE5B9),
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
+          ),
         ],
       ),
     );
@@ -245,7 +255,10 @@ class _FeaturePanelState extends State<FeaturePanel> {
       final isSearch = widget.entry.feature == QqMusicFeature.search;
       return FeatureMessageState(
         icon: isSearch ? Icons.search_rounded : Icons.library_music_rounded,
-        title: isSearch ? '输入关键词搜索 QQ 音乐' : '暂无内容',
+        title: isSearch ? '输入关键词搜索' : '暂无内容',
+        subtitle: isSearch
+            ? '在上方输入关键词搜索 QQ 音乐'
+            : '当前列表为空，试试刷新或换个入口',
         actionLabel: isSearch ? null : '刷新',
         onAction: isSearch ? null : controller.refresh,
       );
@@ -260,7 +273,9 @@ class _FeaturePanelState extends State<FeaturePanel> {
         child: ListView.builder(
           key: const ValueKey('home-feed-card-list'),
           controller: _listController,
-          padding: const EdgeInsets.only(right: 8),
+          // Bottom padding clears the superellipse glass curve so the last
+          // card is fully visible (matches top breathing room).
+          padding: const EdgeInsets.only(right: 8, bottom: _listBottomPad),
           itemExtent: 94,
           itemCount: controller.items.length,
           itemBuilder: (context, index) {
@@ -282,7 +297,7 @@ class _FeaturePanelState extends State<FeaturePanel> {
       child: ListView.builder(
         key: const ValueKey('api-feature-list'),
         controller: _listController,
-        padding: const EdgeInsets.only(right: 8),
+        padding: const EdgeInsets.only(right: 8, bottom: _listBottomPad),
         itemExtent: 58,
         itemCount: controller.items.length,
         itemBuilder: (context, index) {
@@ -302,6 +317,45 @@ class _FeaturePanelState extends State<FeaturePanel> {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+/// Scroll-end inset so list content clears the rounded glass bottom corners.
+const double _listBottomPad = 14;
+
+class _FloatingStatusChip extends StatelessWidget {
+  const _FloatingStatusChip({
+    required this.text,
+    required this.color,
+    super.key,
+  });
+
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xCC111318),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0x22FFFFFF)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        child: Text(
+          text,
+          textAlign: TextAlign.center,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: color,
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
       ),
     );
   }

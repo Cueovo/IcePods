@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:qqmusic_ipod/features/shell/models/ipod_models.dart';
 import 'package:qqmusic_ipod/core/theme/tokens/app_tokens.dart';
 import 'package:qqmusic_ipod/core/theme/widgets/artwork_image.dart';
+import 'package:qqmusic_ipod/features/shell/views/widgets/feature_message_state.dart';
 
 class CoverFlowPanel extends StatelessWidget {
   const CoverFlowPanel({
@@ -18,11 +19,10 @@ class CoverFlowPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (albums.isEmpty) {
-      return const Center(
-        child: Text(
-          '暂无封面数据',
-          style: TextStyle(color: Color(0x80FFFFFF), fontSize: 14),
-        ),
+      return const FeatureMessageState(
+        icon: Icons.album_rounded,
+        title: '暂无封面数据',
+        subtitle: '播放一些歌曲后，这里会展示封面',
       );
     }
     final safeIndex = selectedIndex.clamp(0, albums.length - 1);

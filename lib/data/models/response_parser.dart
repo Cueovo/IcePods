@@ -264,16 +264,91 @@ class QqMusicResponseParser {
       ),
       imageUrl: albumMid.isEmpty ? '' : _albumCover(albumMid),
       type: QqMusicItemType.song,
-      duration: Duration(seconds: _int(song['interval'])),
+      duration: _songDurationFromMap(song),
       // Keep official Song.type as-is (including 0). DelSonglist matches the
       // stored type exactly — coercing 0→1 here makes unlike no-op.
       songType: _nullableInt(
         song['type'] ?? song['songtype'] ?? song['song_type'],
       ),
-      requiresVip: _int(pay['pay_play']) != 0,
+      requiresVip: _songRequiresVip(song, pay),
       isCopyrightRestricted: _isCopyrightRestricted(file),
     );
   }
+
+  /// Home-feed cards often omit `interval`; try several common length keys.
+  Duration _songDurationFromMap(Map<String, dynamic> map) {
+    final seconds = _int(
+      map['interval'] ??
+          map['song_play_time'] ??
+          map['play_time'] ??
+          map['time_public'] ??
+          map['time'] ??
+          map['duration'] ??
+          map['songtime'] ??
+          _map(map['track'])['interval'] ??
+          _map(map['track_info'])['interval'] ??
+          _map(map['miscellany'])['interval'] ??
+          _map(map['miscellany'])['songtime'] ??
+          _map(map['miscellany'])['play_time'],
+    );
+    if (seconds > 0) {
+      // Values > 10000 are almost certainly milliseconds.
+      if (seconds > 10000) {
+        return Duration(milliseconds: seconds);
+      }
+      return Duration(seconds: seconds);
+    }
+    final ms = _int(
+      map['interval_ms'] ??
+          map['duration_ms'] ??
+          map['play_time_ms'] ??
+          _map(map['miscellany'])['duration_ms'],
+    );
+    if (ms > 0) {
+      return Duration(milliseconds: ms);
+    }
+    return Duration.zero;
+  }
+
+  bool _songRequiresVip(Map<String, dynamic> song, Map<String, dynamic> pay) {
+    // pay_play / payplay: non-zero ⇒ free users only get tryout / need VIP.
+    // pay_month is almost always 1 for catalog tracks (package-eligible) and
+    // must NOT be treated as VIP-only — that mis-tagged nearly all 我喜欢 songs.
+    // pay_status is also not a reliable VIP gate on liked-song payloads.
+    if (_int(pay['pay_play']) != 0 ||
+        _int(pay['payplay']) != 0 ||
+        _int(song['pay_play']) != 0 ||
+        _int(song['payplay']) != 0) {
+      return true;
+    }
+    const vipKeys = [
+      'is_vip',
+      'vip',
+      'need_vip',
+      'requires_vip',
+    ];
+    if (vipKeys.any((key) => _truthy(song[key]) || _truthy(pay[key]))) {
+      return true;
+    }
+    // action is often a Map of UI flags; only treat string hints carefully.
+    final action = song['action'] ?? pay['action'];
+    if (action is Map) {
+      final actionMap = Map<String, dynamic>.from(action);
+      if (vipKeys.any(_truthyFrom(actionMap))) {
+        return true;
+      }
+    } else {
+      final text = _string(action).toLowerCase();
+      // Avoid matching incidental "pay" substrings from serialized maps.
+      if (text.contains('vip') || text == 'pay' || text.contains('need_pay')) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool Function(String) _truthyFrom(Map<String, dynamic> map) =>
+      (key) => _truthy(map[key]);
 
   List<QqMusicItem> _songs(Object? value) {
     return _list(
@@ -720,12 +795,16 @@ class QqMusicResponseParser {
       if (id.isEmpty) {
         return null;
       }
+      final songDuration = _songDurationFromMap(card);
       return QqMusicItem(
         id: id,
         title: title,
         subtitle: subtitle,
         imageUrl: cover,
         type: QqMusicItemType.song,
+        duration: songDuration > Duration.zero
+            ? songDuration
+            : _songDurationFromMap(miscellany),
         requiresVip: _homeFeedCardRequiresVip(card, miscellany),
       );
     }

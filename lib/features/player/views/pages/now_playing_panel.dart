@@ -1,4 +1,4 @@
-import 'dart:math' as math;
+﻿import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -7,6 +7,7 @@ import 'package:qqmusic_ipod/business/entities/music.dart';
 import 'package:qqmusic_ipod/core/theme/tokens/app_tokens.dart';
 import 'package:qqmusic_ipod/core/theme/widgets/artwork_image.dart';
 import 'package:qqmusic_ipod/features/shell/models/ipod_models.dart';
+import 'package:qqmusic_ipod/features/shell/views/widgets/feature_message_state.dart';
 
 class NowPlayingPanel extends StatefulWidget {
   const NowPlayingPanel({
@@ -168,7 +169,7 @@ class _NowPlayingPanelState extends State<NowPlayingPanel> {
                     style: TextStyle(
                       color: const Color(0x99FFFFFF),
                       fontSize: artistSize,
-                      fontWeight: FontWeight.w500,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                   if (widget.audioOutputName.isNotEmpty) ...[
@@ -194,6 +195,7 @@ class _NowPlayingPanelState extends State<NowPlayingPanel> {
                     style: const TextStyle(
                       color: Color(0xFFFFA8A8),
                       fontSize: 10,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ],
@@ -589,40 +591,11 @@ class _EmptyNowPlaying extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: 36),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.music_off_rounded,
-              key: ValueKey('empty-now-playing'),
-              color: Color(0x6631C27C),
-              size: 72,
-            ),
-            SizedBox(height: 18),
-            Text(
-              '暂无正在播放',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 21,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            SizedBox(height: 8),
-            Text(
-              '从“我喜欢”、推荐或歌单中选择一首歌曲',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Color(0x80FFFFFF),
-                fontSize: 12,
-                height: 1.5,
-              ),
-            ),
-          ],
-        ),
-      ),
+    return const FeatureMessageState(
+      key: ValueKey('empty-now-playing'),
+      icon: Icons.music_off_rounded,
+      title: '暂无正在播放',
+      subtitle: '从“我喜欢”、推荐或歌单中选择一首歌曲',
     );
   }
 }
@@ -907,7 +880,11 @@ class _LyricsViewState extends State<_LyricsView>
       return const Center(
         child: Text(
           '暂无歌词',
-          style: TextStyle(color: Color(0x99FFFFFF), fontSize: 14),
+          style: TextStyle(
+            color: Color(0x99FFFFFF),
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+          ),
         ),
       );
     }
@@ -1009,7 +986,7 @@ class _LyricsTrackMetadata extends StatelessWidget {
                 style: const TextStyle(
                   color: Color(0xB3FFFFFF),
                   fontSize: 14,
-                  fontWeight: FontWeight.w500,
+                  fontWeight: FontWeight.w700,
                   height: 1.1,
                 ),
               ),
@@ -1106,7 +1083,7 @@ class _AudioOutputPill extends StatelessWidget {
                     style: TextStyle(
                       color: textColor,
                       fontSize: 10,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w700,
                       height: 1.1,
                     ),
                   ),
@@ -1249,7 +1226,7 @@ class _LyricLineText extends StatelessWidget {
           ? const Color(0x66FFFFFF)
           : Colors.white,
       fontSize: 17,
-      fontWeight: FontWeight.w700,
+      fontWeight: FontWeight.w800,
       height: 1.15,
       letterSpacing: .15,
     );
@@ -1436,5 +1413,5 @@ Shader _lyricProgressShader(Rect bounds, double progress) {
 const _timeStyle = TextStyle(
   color: Color(0x80FFFFFF),
   fontSize: 12,
-  fontWeight: FontWeight.w600,
+  fontWeight: FontWeight.w700,
 );

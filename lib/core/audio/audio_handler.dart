@@ -31,7 +31,27 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
   Future<void> load(QqMusicItem song, Uri uri) async {
     await player.setAudioSource(AudioSource.uri(uri));
     currentSong = song;
-    mediaItem.add(_mediaItemFor(song));
+    // Prefer the duration the player resolved from the stream (home-feed
+    // cards often omit interval / length metadata).
+    final resolvedDuration = player.duration ??
+        (song.duration > Duration.zero ? song.duration : null);
+    mediaItem.add(_mediaItemFor(song, durationOverride: resolvedDuration));
+  }
+
+  /// Push a known duration onto the current [MediaItem] (e.g. after the
+  /// player reports length for a song that had duration=0 in the feed).
+  void updateDuration(Duration duration) {
+    final song = currentSong;
+    final current = mediaItem.value;
+    if (song == null || duration <= Duration.zero) {
+      return;
+    }
+    if (current?.duration == duration) {
+      return;
+    }
+    mediaItem.add(
+      (current ?? _mediaItemFor(song)).copyWith(duration: duration),
+    );
   }
 
   @override
@@ -174,18 +194,23 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
     playbackState.add(_stateFor(event));
   }
 
-  MediaItem _mediaItemFor(QqMusicItem song) {
+  MediaItem _mediaItemFor(
+    QqMusicItem song, {
+    Duration? durationOverride,
+  }) {
     final artworkUrl = song.imageUrl.replaceFirst(
       RegExp(r'^http://y\.gtimg\.cn/'),
       'https://y.gtimg.cn/',
     );
     final artworkUri = Uri.tryParse(artworkUrl);
+    final duration = durationOverride ??
+        (song.duration == Duration.zero ? null : song.duration);
     return MediaItem(
       id: song.mid.isEmpty ? song.id : song.mid,
       album: 'QQ 音乐',
       title: song.title,
       artist: song.subtitle,
-      duration: song.duration == Duration.zero ? null : song.duration,
+      duration: duration,
       artUri: artworkUri?.hasScheme == true ? artworkUri : null,
     );
   }

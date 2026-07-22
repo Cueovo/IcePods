@@ -79,7 +79,8 @@ class _HomePanelState extends State<HomePanel> {
     final selected = widget.page.entries[widget.selectedIndex];
     // Content floats on ambient; no opaque sheet under the split.
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      // No fixed bottom reserve — list padding clears the glass curve instead.
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -94,7 +95,8 @@ class _HomePanelState extends State<HomePanel> {
               child: ListView.separated(
                 key: ValueKey('menu-list-${widget.page.section.name}'),
                 controller: _menuController,
-                padding: EdgeInsets.zero,
+                // Clear superellipse bottom so last menu row is fully visible.
+                padding: const EdgeInsets.only(bottom: 14),
                 physics: const ClampingScrollPhysics(),
                 itemCount: widget.page.entries.length,
                 separatorBuilder: (context, index) =>
@@ -110,7 +112,9 @@ class _HomePanelState extends State<HomePanel> {
           ),
           const SizedBox(width: 15),
           Expanded(
-            child: AnimatedSwitcher(
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 14),
+              child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 400),
               switchInCurve: const Cubic(0.2, 0.8, 0.2, 1),
               switchOutCurve: Curves.easeIn,
@@ -131,6 +135,7 @@ class _HomePanelState extends State<HomePanel> {
                 key: ValueKey(selected.id),
                 entry: selected,
               ),
+            ),
             ),
           ),
         ],
@@ -213,7 +218,7 @@ class _MenuTile extends StatelessWidget {
               style: TextStyle(
                 color: selected ? Colors.white : const Color(0x99FFFFFF),
                 fontSize: 13,
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                fontWeight: selected ? FontWeight.w800 : FontWeight.w700,
                 letterSpacing: selected ? 0.1 : 0,
               ),
               child: Text(
@@ -357,7 +362,7 @@ class _PreviewCard extends StatelessWidget {
                             color: Color(0xBFFFFFFF),
                             fontSize: 12,
                             height: 1.4,
-                            fontWeight: FontWeight.w500,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                       ],

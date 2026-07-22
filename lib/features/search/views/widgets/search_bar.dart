@@ -19,10 +19,17 @@ class FeatureSearchBar extends StatelessWidget {
         controller: controller,
         textInputAction: TextInputAction.search,
         onSubmitted: onSearch,
-        style: const TextStyle(color: Colors.white, fontSize: 13),
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 13,
+          fontWeight: FontWeight.w700,
+        ),
         decoration: InputDecoration(
           hintText: '歌曲、歌手、专辑、歌单、MV',
-          hintStyle: const TextStyle(color: Color(0x66FFFFFF)),
+          hintStyle: const TextStyle(
+            color: Color(0x66FFFFFF),
+            fontWeight: FontWeight.w700,
+          ),
           prefixIcon: const Icon(
             Icons.search_rounded,
             color: Color(0x99FFFFFF),

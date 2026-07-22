@@ -120,6 +120,7 @@ class HomeFeedCard extends StatelessWidget {
                     style: const TextStyle(
                       color: Color(0x88FFFFFF),
                       fontSize: 11,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ],

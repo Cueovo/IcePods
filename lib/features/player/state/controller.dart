@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:math';
 
 import 'package:audio_session/audio_session.dart';
@@ -125,7 +125,21 @@ class QqMusicController extends ChangeNotifier {
     );
     _subscriptions.add(
       (durationStream ?? _audioPlayer.durationStream).listen((duration) {
-        _duration = duration ?? _currentSong?.duration ?? Duration.zero;
+        // Prefer the live player duration — home-feed songs often ship with
+        // duration=0 in the card payload.
+        final resolved =
+            (duration != null && duration > Duration.zero)
+                ? duration
+                : (_audioPlayer.duration != null &&
+                      _audioPlayer.duration! > Duration.zero)
+                ? _audioPlayer.duration!
+                : (_currentSong?.duration ?? Duration.zero);
+        if (resolved > Duration.zero) {
+          _duration = resolved;
+          _audioHandler?.updateDuration(resolved);
+        } else if (_duration <= Duration.zero) {
+          _duration = Duration.zero;
+        }
         _publishPlaybackProgress();
       }),
     );
@@ -150,6 +164,10 @@ class QqMusicController extends ChangeNotifier {
   late final Future<void> Function() _audioSessionConfigurator;
   late final Future<String> Function() _audioOutputNameLoader;
   final List<StreamSubscription<Object?>> _subscriptions = [];
+  Timer? _statusClearTimer;
+  Timer? _playbackErrorClearTimer;
+  static const _statusMessageTtl = Duration(seconds: 2);
+  static const _playbackErrorTtl = Duration(seconds: 4);
   final ValueNotifier<QqMusicPlaybackProgress> playbackProgress = ValueNotifier(
     const QqMusicPlaybackProgress(),
   );
@@ -407,8 +425,8 @@ class QqMusicController extends ChangeNotifier {
     _resultPath.clear();
     _containerPath.clear();
     _error = '';
-    _playbackError = '';
-    _statusMessage = '';
+    _clearPlaybackError();
+    _clearStatusMessage(scheduleDismiss: false);
     _stopQrPolling();
     notifyListeners();
     if (entry.feature == QqMusicFeature.account) {
@@ -480,7 +498,7 @@ class QqMusicController extends ChangeNotifier {
     }
   }
 
-  Future<bool> _startRadarPlayback() async {
+  Future<bool> _startRadarPlayback({int direction = 1}) async {
     if (_switchingTrack) {
       _radarPlayPending = true;
       return false;
@@ -493,47 +511,106 @@ class QqMusicController extends ChangeNotifier {
     try {
       do {
         _radarPlayPending = false;
-        final stationItems = items;
-        if (stationItems.isEmpty) {
-          played = false;
-          break;
-        }
-        final initialIndex = _selectedIndex.clamp(0, stationItems.length - 1);
-        played = false;
-        for (var offset = 0; offset < stationItems.length; offset++) {
-          final index = (initialIndex + offset) % stationItems.length;
-          final song = stationItems[index];
-          if (!song.isSong ||
-              _shouldBlockVipPlayback(song) ||
-              song.isCopyrightRestricted ||
-              isUnavailable(song)) {
-            continue;
-          }
-          if (_selectedIndex != index) {
-            _selectedIndex = index;
-            notifyListeners();
-          }
-          if (isCurrentSong(song)) {
-            if (!isPlaying) {
-              await _startPlayback();
-            }
-            played = true;
-            break;
-          }
-          if (await play(song, queue: List.unmodifiable(stationItems))) {
-            played = true;
-            break;
-          }
-        }
+        played = await _playRadarFromSelection(direction: direction);
       } while (_radarPlayPending);
       return played;
     } finally {
       _switchingTrack = false;
       if (_radarPlayPending) {
         _radarPlayPending = false;
-        unawaited(_startRadarPlayback());
+        unawaited(_startRadarPlayback(direction: direction));
       }
     }
+  }
+
+  Future<bool> _playRadarFromSelection({int direction = 1}) async {
+    final step = direction == 0 ? 1 : (direction > 0 ? 1 : -1);
+    final wrap = direction == 0;
+    var index = _selectedIndex.clamp(0, items.isEmpty ? 0 : items.length - 1);
+    final visited = <int>{};
+
+    while (items.isNotEmpty) {
+      if (index < 0) {
+        return false;
+      }
+      if (index >= items.length) {
+        if (step < 0 || !await _loadMoreIfPossible()) {
+          return false;
+        }
+        continue;
+      }
+      if (!visited.add(index)) {
+        return false;
+      }
+
+      final song = items[index];
+      if (_selectedIndex != index) {
+        _selectedIndex = index;
+        notifyListeners();
+      }
+      if (index >= items.length - 3) {
+        unawaited(_maybeLoadMore());
+      }
+
+      if (!song.isSong ||
+          _shouldBlockVipPlayback(song) ||
+          song.isCopyrightRestricted ||
+          isUnavailable(song)) {
+        index += step;
+        if (wrap && index >= items.length) {
+          index = 0;
+        }
+        continue;
+      }
+
+      if (isCurrentSong(song)) {
+        if (!isPlaying) {
+          await _startPlayback();
+        }
+        return true;
+      }
+
+      final queue = List<QqMusicItem>.unmodifiable(
+        items.where((item) => item.isSong),
+      );
+      if (await play(song, queue: queue)) {
+        return true;
+      }
+
+      if (_shouldAutoSkipFailedSong(song)) {
+        index += step;
+        if (wrap && index >= items.length) {
+          index = 0;
+        }
+        continue;
+      }
+      return false;
+    }
+    return false;
+  }
+
+  bool _shouldAutoSkipFailedSong(QqMusicItem song) {
+    if (_shouldBlockVipPlayback(song) ||
+        song.isCopyrightRestricted ||
+        isUnavailable(song)) {
+      return true;
+    }
+    // Known non-VIP: skip tracks marked VIP even before a play attempt fails.
+    if (song.requiresVip && _profile?.isVip == false) {
+      return true;
+    }
+    final message = _playbackError;
+    return message.contains('VIP') ||
+        message.contains('会员') ||
+        message.contains('版权') ||
+        message.contains('播放地址') ||
+        message.contains('无音源');
+  }
+
+  Future<bool> _loadMoreIfPossible() async {
+    final before = items.length;
+    await _maybeLoadMore(forceNearEnd: true);
+    return items.length > before;
   }
 
   Future<void> search(String keyword) async {
@@ -579,22 +656,22 @@ class QqMusicController extends ChangeNotifier {
         if (marked) {
           _favoritePlaylistIds.remove(key);
           _unfavoritePlaylistIds.add(key);
-          _statusMessage = '已取消收藏歌单';
+          _setStatusMessage('已取消收藏歌单');
         } else {
           _unfavoritePlaylistIds.remove(key);
           _favoritePlaylistIds.add(key);
-          _statusMessage = '已收藏歌单';
+          _setStatusMessage('已收藏歌单');
         }
       } else {
         await api.setDislike(item, disliked: !marked);
         if (marked) {
           _dislikedItemIds.remove(key);
           _undislikedItemIds.add(key);
-          _statusMessage = '已从不喜欢中移除';
+          _setStatusMessage('已从不喜欢中移除');
         } else {
           _undislikedItemIds.remove(key);
           _dislikedItemIds.add(key);
-          _statusMessage = '已加入不喜欢';
+          _setStatusMessage('已加入不喜欢');
         }
       }
     });
@@ -613,7 +690,7 @@ class QqMusicController extends ChangeNotifier {
       final playlist = await api.createPlaylist(name);
       _replaceCurrentItems([...items, playlist]);
       _selectedIndex = items.length - 1;
-      _statusMessage = '已创建歌单「${playlist.title}」';
+      _setStatusMessage('已创建歌单「${playlist.title}」');
     });
   }
 
@@ -633,7 +710,7 @@ class QqMusicController extends ChangeNotifier {
         0,
         items.isEmpty ? 0 : items.length - 1,
       );
-      _statusMessage = '已删除歌单「${playlist.title}」';
+      _setStatusMessage('已删除歌单「${playlist.title}」');
     });
   }
 
@@ -649,7 +726,7 @@ class QqMusicController extends ChangeNotifier {
     await _runAction(() async {
       await api.addSongsToPlaylist(_playlistDirectoryId(playlist), [song]);
       _childrenCache.remove(_itemKey(playlist));
-      _statusMessage = '已将「${song.title}」加入「${playlist.title}」';
+      _setStatusMessage('已将「${song.title}」加入「${playlist.title}」');
     });
   }
 
@@ -668,7 +745,7 @@ class QqMusicController extends ChangeNotifier {
         0,
         items.isEmpty ? 0 : items.length - 1,
       );
-      _statusMessage = '已从歌单移除「${song.title}」';
+      _setStatusMessage('已从歌单移除「${song.title}」');
     });
   }
 
@@ -721,27 +798,40 @@ class QqMusicController extends ChangeNotifier {
     if (items.isEmpty) {
       return;
     }
-    final next = (_selectedIndex + direction).clamp(0, items.length - 1);
-    if (next == _selectedIndex) {
-      if (direction > 0) {
-        await _maybeLoadMore();
+    final step = direction >= 0 ? 1 : -1;
+    final currentInList = items.indexWhere(
+      (item) => _sameSong(item, _currentSong),
+    );
+    final baseIndex = currentInList >= 0 ? currentInList : _selectedIndex;
+    final next = baseIndex + step;
+    if (next < 0) {
+      return;
+    }
+    if (next >= items.length) {
+      if (step > 0 && await _loadMoreIfPossible()) {
+        _selectedIndex = next.clamp(0, items.length - 1);
+        notifyListeners();
+        await _startRadarPlayback(direction: step);
       }
       return;
     }
     _selectedIndex = next;
     notifyListeners();
     unawaited(_maybeLoadMore());
-    await _startRadarPlayback();
+    await _startRadarPlayback(direction: step);
   }
 
-  Future<void> _maybeLoadMore() async {
+  Future<void> _maybeLoadMore({bool forceNearEnd = false}) async {
     final active = result;
     final feature = _entry?.feature;
     final container = currentContainer;
+    final nearEnd = forceNearEnd ||
+        _selectedIndex >= items.length - 3 ||
+        (feature == QqMusicFeature.radar && _selectedIndex >= items.length - 1);
     if (active == null ||
         !active.hasMore ||
         _loadingMore ||
-        _selectedIndex < items.length - 3 ||
+        !nearEnd ||
         (container == null &&
             (feature == null ||
                 feature == QqMusicFeature.search ||
@@ -789,6 +879,12 @@ class QqMusicController extends ChangeNotifier {
         _childrenPages[containerKey] = nextPage;
         _childrenCache[containerKey] = updated;
       }
+      if (_entry?.feature == QqMusicFeature.radar && appended.isNotEmpty) {
+        final songs = updated.items.where((item) => item.isSong).toList();
+        if (songs.isNotEmpty) {
+          _playbackQueue = List.unmodifiable(songs);
+        }
+      }
       notifyListeners();
       if (appended.isNotEmpty) {
         unawaited(_probePlayableUrls(appended));
@@ -812,17 +908,17 @@ class QqMusicController extends ChangeNotifier {
     }
     if (item.isSong) {
       if (_shouldBlockVipPlayback(item)) {
-        _playbackError = '该歌曲需要 VIP 会员才能播放';
+        _setPlaybackError('该歌曲需要 VIP 会员才能播放');
         notifyListeners();
         return false;
       }
       if (item.isCopyrightRestricted) {
-        _playbackError = '歌曲暂无版权';
+        _setPlaybackError('歌曲暂无版权');
         notifyListeners();
         return false;
       }
       if (isUnavailable(item)) {
-        _playbackError = _unavailableSongMessage(item);
+        _setPlaybackError(_unavailableSongMessage(item));
         notifyListeners();
         return false;
       }
@@ -849,7 +945,7 @@ class QqMusicController extends ChangeNotifier {
         if (!opened) {
           throw const QqMusicApiException('无法打开 MV 播放地址');
         }
-        _statusMessage = '已打开 MV「${item.title}」';
+        _setStatusMessage('已打开 MV「${item.title}」');
       });
       return true;
     }
@@ -872,7 +968,7 @@ class QqMusicController extends ChangeNotifier {
   }
 
   void leaveFeature() {
-    _playbackError = '';
+    _clearPlaybackError();
     _stopQrPolling();
   }
 
@@ -894,26 +990,26 @@ class QqMusicController extends ChangeNotifier {
     List<QqMusicItem>? queue,
   }) async {
     if (_sameSong(song, _currentSong)) {
-      _playbackError = '';
+      _clearPlaybackError();
       notifyListeners();
       return true;
     }
     if (_shouldBlockVipPlayback(song)) {
-      _playbackError = '该歌曲需要 VIP 会员才能播放';
+      _setPlaybackError('该歌曲需要 VIP 会员才能播放');
       notifyListeners();
       return false;
     }
     if (song.isCopyrightRestricted) {
-      _playbackError = '歌曲暂无版权';
+      _setPlaybackError('歌曲暂无版权');
       notifyListeners();
       return false;
     }
     if (isUnavailable(song)) {
-      _playbackError = _unavailableSongMessage(song);
+      _setPlaybackError(_unavailableSongMessage(song));
       notifyListeners();
       return false;
     }
-    _playbackError = '';
+    _clearPlaybackError();
     _isLoading = true;
     notifyListeners();
     var loaded = false;
@@ -942,7 +1038,17 @@ class QqMusicController extends ChangeNotifier {
               : List.unmodifiable([song]);
         }
       }
-      _duration = song.duration;
+      // Never clobber a good player-reported duration with a zero metadata field
+      // (home feed cards often omit interval).
+      final playerDuration = _audioHandler?.duration ?? _audioPlayer.duration;
+      if (song.duration > Duration.zero) {
+        _duration = song.duration;
+      } else if (playerDuration != null && playerDuration > Duration.zero) {
+        _duration = playerDuration;
+        _audioHandler?.updateDuration(playerDuration);
+      } else {
+        _duration = Duration.zero;
+      }
       _position = Duration.zero;
       _publishPlaybackProgress();
       _prefetchAdjacentPlayableUrls(song);
@@ -952,7 +1058,7 @@ class QqMusicController extends ChangeNotifier {
       if (_isUnavailablePlaybackError(error)) {
         _markUnavailable(song);
       }
-      _playbackError = _playbackFailureMessage(error, song: song);
+      _setPlaybackError(_playbackFailureMessage(error, song: song));
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -1004,7 +1110,7 @@ class QqMusicController extends ChangeNotifier {
     _playbackRequested = false;
     _isBuffering = false;
     _error = '';
-    _playbackError = '';
+    _clearPlaybackError();
     notifyListeners();
   }
 
@@ -1053,7 +1159,8 @@ class QqMusicController extends ChangeNotifier {
           }
           return;
         }
-        if (!isUnavailable(nextSong)) {
+        // Keep walking past VIP / unplayable songs instead of stopping.
+        if (!_shouldAutoSkipFailedSong(nextSong)) {
           return;
         }
         currentIndex = next;
@@ -1154,13 +1261,13 @@ class QqMusicController extends ChangeNotifier {
       return;
     }
     if (!_isSourcePlaybackError(error)) {
-      _playbackError = _message(error);
+      _setPlaybackError(_message(error));
       notifyListeners();
       return;
     }
     final song = _currentSong;
     if (song == null) {
-      _playbackError = _message(error);
+      _setPlaybackError(_message(error));
       notifyListeners();
       return;
     }
@@ -1179,7 +1286,7 @@ class QqMusicController extends ChangeNotifier {
     }
     _recoveringSourceError = true;
     _isBuffering = true;
-    _playbackError = '';
+    _clearPlaybackError();
     _prefetchedPlayableUrls.remove(_songKey(song));
     notifyListeners();
     try {
@@ -1208,7 +1315,7 @@ class QqMusicController extends ChangeNotifier {
         if (_isUnavailablePlaybackError(error)) {
           _markUnavailable(song);
         }
-        _playbackError = _playbackFailureMessage(error, song: song);
+        _setPlaybackError(_playbackFailureMessage(error, song: song));
       }
     } finally {
       _loadingAudioSource = false;
@@ -1226,7 +1333,7 @@ class QqMusicController extends ChangeNotifier {
       if (error is PlayerException) {
         _handlePlayerError(error);
       } else {
-        _playbackError = _message(error);
+        _setPlaybackError(_message(error));
         notifyListeners();
       }
     }
@@ -1398,7 +1505,7 @@ class QqMusicController extends ChangeNotifier {
       }
     }
     _setSongLikedInMemory(song, !wasLiked);
-    _statusMessage = wasLiked ? '已取消喜欢' : '已添加到我喜欢';
+    _setStatusMessage(wasLiked ? '已取消喜欢' : '已添加到我喜欢');
     _error = '';
     _isLoading = true;
     notifyListeners();
@@ -1415,7 +1522,7 @@ class QqMusicController extends ChangeNotifier {
         }
       }
       _currentSongFromLiked = wasLiked;
-      _statusMessage = '';
+      _clearStatusMessage(scheduleDismiss: false);
       _error = _message(error);
     } finally {
       _isLoading = false;
@@ -1519,7 +1626,7 @@ class QqMusicController extends ChangeNotifier {
     _stopQrPolling();
     _qrLoginType = loginType;
     _error = '';
-    _statusMessage = '';
+    _clearStatusMessage(scheduleDismiss: false);
     _qrCode = null;
     _qrStatus = null;
     _isLoading = true;
@@ -1565,6 +1672,8 @@ class QqMusicController extends ChangeNotifier {
     if (_statusMessage.contains('网络暂时') ||
         _statusMessage.contains('Failed host lookup') ||
         _statusMessage.contains('failed host lookup')) {
+      // Sticky QR-login hint — do not auto-dismiss until next poll success.
+      _statusClearTimer?.cancel();
       _statusMessage = '已回到应用，正在继续检测登录…';
       changed = true;
     }
@@ -1629,7 +1738,7 @@ class QqMusicController extends ChangeNotifier {
   }) async {
     _isLoading = true;
     _error = '';
-    _statusMessage = '';
+    _clearStatusMessage(scheduleDismiss: false);
     notifyListeners();
     try {
       final response = await operation();
@@ -1722,16 +1831,65 @@ class QqMusicController extends ChangeNotifier {
   Future<void> _runAction(Future<void> Function() operation) async {
     _isLoading = true;
     _error = '';
-    _statusMessage = '';
+    _clearStatusMessage(scheduleDismiss: false);
     notifyListeners();
     try {
       await operation();
+      _scheduleStatusDismiss();
     } catch (error) {
       _error = _message(error);
     } finally {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  void _setStatusMessage(String message) {
+    _statusClearTimer?.cancel();
+    _statusMessage = message;
+    if (message.isNotEmpty) {
+      _scheduleStatusDismiss();
+    }
+  }
+
+  void _clearStatusMessage({bool scheduleDismiss = true}) {
+    _statusClearTimer?.cancel();
+    _statusClearTimer = null;
+    _statusMessage = '';
+  }
+
+  void _scheduleStatusDismiss() {
+    _statusClearTimer?.cancel();
+    if (_statusMessage.isEmpty) {
+      return;
+    }
+    _statusClearTimer = Timer(_statusMessageTtl, () {
+      if (_statusMessage.isEmpty) {
+        return;
+      }
+      _statusMessage = '';
+      notifyListeners();
+    });
+  }
+
+  void _setPlaybackError(String message) {
+    _playbackErrorClearTimer?.cancel();
+    _playbackError = message;
+    if (message.isNotEmpty) {
+      _playbackErrorClearTimer = Timer(_playbackErrorTtl, () {
+        if (_playbackError.isEmpty) {
+          return;
+        }
+        _clearPlaybackError();
+        notifyListeners();
+      });
+    }
+  }
+
+  void _clearPlaybackError() {
+    _playbackErrorClearTimer?.cancel();
+    _playbackErrorClearTimer = null;
+    _playbackError = '';
   }
 
   Future<void> _configureAudioSession() async {
@@ -1764,7 +1922,7 @@ class QqMusicController extends ChangeNotifier {
         _error = '';
       }
       if (_statusMessage.contains('网络暂时') || _statusMessage.contains('已回到应用')) {
-        _statusMessage = '';
+        _clearStatusMessage(scheduleDismiss: false);
       }
       if (status.done && api.isLoggedIn) {
         _stopQrPolling();
@@ -1777,7 +1935,8 @@ class QqMusicController extends ChangeNotifier {
       if (_isTransientQrNetworkError(message)) {
         // Background / app-switch DNS blips are expected while the user is in QQ.
         // Keep the QR session and timer; do not push a fatal error that replaces
-        // the login UI.
+        // the login UI. Sticky until a successful poll.
+        _statusClearTimer?.cancel();
         _statusMessage = '网络暂时不可用，返回应用后将自动继续检测登录';
       } else {
         _error = message;
@@ -1859,6 +2018,8 @@ class QqMusicController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _statusClearTimer?.cancel();
+    _playbackErrorClearTimer?.cancel();
     _stopQrPolling();
     for (final subscription in _subscriptions) {
       unawaited(subscription.cancel());

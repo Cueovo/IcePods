@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import 'package:qqmusic_ipod/core/theme/widgets/artwork_image.dart';
 import 'package:qqmusic_ipod/features/player/state/controller.dart';
@@ -143,7 +143,7 @@ class RadarStation extends StatelessWidget {
               style: const TextStyle(
                 color: Color(0x99FFFFFF),
                 fontSize: 13,
-                fontWeight: FontWeight.w500,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ],

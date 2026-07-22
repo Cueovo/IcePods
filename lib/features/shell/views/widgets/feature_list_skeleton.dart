@@ -44,6 +44,7 @@ class _FeatureListSkeletonState extends State<FeatureListSkeleton>
       },
       child: ListView.separated(
         physics: const NeverScrollableScrollPhysics(),
+        padding: const EdgeInsets.only(bottom: 14),
         itemCount: 6,
         separatorBuilder: (context, index) => const SizedBox(height: 6),
         itemBuilder: (context, index) {
