@@ -1,4 +1,5 @@
 import Flutter
+import MediaPlayer
 import UIKit
 
 @main
@@ -7,6 +8,7 @@ import UIKit
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    application.beginReceivingRemoteControlEvents()
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
@@ -23,6 +25,27 @@ import UIKit
       switch call.method {
       case "displayCornerRadius":
         result(Self.displayCornerRadius())
+      case "setNowPlayingPlaybackState":
+        guard #available(iOS 13.0, *), let state = call.arguments as? String else {
+          result(nil)
+          return
+        }
+        switch state {
+        case "playing":
+          MPNowPlayingInfoCenter.default().playbackState = .playing
+        case "paused":
+          MPNowPlayingInfoCenter.default().playbackState = .paused
+        case "stopped":
+          MPNowPlayingInfoCenter.default().playbackState = .stopped
+        default:
+          result(FlutterError(
+            code: "invalid_now_playing_state",
+            message: "Unsupported Now Playing playback state: \(state)",
+            details: nil
+          ))
+          return
+        }
+        result(nil)
       default:
         result(FlutterMethodNotImplemented)
       }

@@ -185,7 +185,7 @@ class ChassisInsets {
         // Island sits a bit lower than a pure 8pt inset; keep top/side equal
         // so the superellipse stays concentric with the physical display curve.
         // Clearance for the island itself still comes from residual top in glass.
-        const islandOuter = 6.0;
+        const islandOuter = 6.5;
         return ChassisInsets(
           family: family,
           rawTop: rawTop,

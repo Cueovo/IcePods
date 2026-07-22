@@ -20,11 +20,7 @@ import 'package:qqmusic_ipod/features/shell/views/widgets/home_panel.dart';
 import 'package:qqmusic_ipod/features/shell/views/widgets/ipod_status_bar.dart';
 
 class IpodScreen extends StatefulWidget {
-  const IpodScreen({
-    required this.api,
-    this.audioHandler,
-    super.key,
-  });
+  const IpodScreen({required this.api, this.audioHandler, super.key});
 
   final QqMusicApi api;
   final QqMusicAudioHandler? audioHandler;
@@ -110,6 +106,7 @@ class _IpodShellView extends StatelessWidget {
     final media = MediaQuery.of(context);
     // Outer / bezel adapt so punch-holes sit inside the top bezel band.
     final chassisInsets = ChassisInsets.resolve(media);
+    final keyboardVisible = media.viewInsets.bottom > 0;
     // Framed display with continuous-corner (superellipse) curvature.
     // iOS: match physical device corner (concentric with phone bezel).
     // Android / other: keep themed iPod panel radius.
@@ -282,27 +279,28 @@ class _IpodShellView extends StatelessWidget {
                   ),
                 ),
               ),
-              Expanded(
-                flex: 48,
-                child: Align(
-                  // Lower the wheel a bit so the larger screen has breathing room.
-                  alignment: const Alignment(0, -0.12),
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: ClickWheel(
-                      onRotate: shell.handleRotate,
-                      onRotationEnd: () =>
-                          unawaited(shell.handleRotationEnd()),
-                      onCenter: shell.handleCenter,
-                      onMenu: shell.handleMenu,
-                      onPrevious: () => shell.stepSelection(-1),
-                      onNext: () => shell.stepSelection(1),
-                      onPlayPause: shell.togglePlayback,
-                      isPlaying: shell.wheelIsPlaying,
+              if (!keyboardVisible)
+                Expanded(
+                  flex: 48,
+                  child: Align(
+                    // Lower the wheel a bit so the larger screen has breathing room.
+                    alignment: const Alignment(0, -0.12),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: ClickWheel(
+                        onRotate: shell.handleRotate,
+                        onRotationEnd: () =>
+                            unawaited(shell.handleRotationEnd()),
+                        onCenter: shell.handleCenter,
+                        onMenu: shell.handleMenu,
+                        onPrevious: () => shell.stepSelection(-1),
+                        onNext: () => shell.stepSelection(1),
+                        onPlayPause: shell.togglePlayback,
+                        isPlaying: shell.wheelIsPlaying,
+                      ),
                     ),
                   ),
                 ),
-              ),
             ],
           ),
         ),
@@ -358,19 +356,16 @@ class _NowPlayingHost extends StatelessWidget {
           duration: duration,
           rotationDelta: shell.playerRotationDelta,
           isBuffering: shell.music.isBuffering,
-          isPlaying:
-              shell.mode == PlayerMode.player && shell.music.isPlaying,
+          isPlaying: shell.mode == PlayerMode.player && shell.music.isPlaying,
           error: shell.music.playbackError,
-          isEmpty:
-              shell.music.currentSong == null && !shell.hasLocalSelection,
+          isEmpty: shell.music.currentSong == null && !shell.hasLocalSelection,
           lyrics: shell.music.lyrics,
           isLoadingLyrics: shell.music.isLoadingLyrics,
           audioOutputName: shell.music.audioOutputName,
           isLiked: shell.music.isCurrentSongLiked,
           isSeeking: preview != null,
           playbackMode: shell.music.playbackMode,
-          onLikedPressed: () =>
-              unawaited(shell.music.toggleCurrentSongLiked()),
+          onLikedPressed: () => unawaited(shell.music.toggleCurrentSongLiked()),
           onPlaybackModePressed: shell.music.cyclePlaybackMode,
         );
       },

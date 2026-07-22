@@ -57,7 +57,7 @@ class _HomePanelState extends State<HomePanel> {
     if (itemTop < viewTop + 4) {
       target = itemTop;
     } else if (itemBottom > viewBottom - 4) {
-      target = itemBottom - position.viewportDimension;
+      target = itemBottom - position.viewportDimension + 4;
     } else {
       // Already fully visible 鈥?no need to scroll.
       return;
@@ -80,7 +80,7 @@ class _HomePanelState extends State<HomePanel> {
     // Content floats on ambient; no opaque sheet under the split.
     return Padding(
       // No fixed bottom reserve — list padding clears the glass curve instead.
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 14),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -96,7 +96,8 @@ class _HomePanelState extends State<HomePanel> {
                 key: ValueKey('menu-list-${widget.page.section.name}'),
                 controller: _menuController,
                 // Clear superellipse bottom so last menu row is fully visible.
-                padding: const EdgeInsets.only(bottom: 14),
+                padding: const EdgeInsets.only(bottom: 4),
+                clipBehavior: Clip.none,
                 physics: const ClampingScrollPhysics(),
                 itemCount: widget.page.entries.length,
                 separatorBuilder: (context, index) =>
@@ -112,9 +113,7 @@ class _HomePanelState extends State<HomePanel> {
           ),
           const SizedBox(width: 15),
           Expanded(
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: 14),
-              child: AnimatedSwitcher(
+            child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 400),
               switchInCurve: const Cubic(0.2, 0.8, 0.2, 1),
               switchOutCurve: Curves.easeIn,
@@ -131,11 +130,7 @@ class _HomePanelState extends State<HomePanel> {
                   ),
                 );
               },
-              child: _PreviewCard(
-                key: ValueKey(selected.id),
-                entry: selected,
-              ),
-            ),
+              child: _PreviewCard(key: ValueKey(selected.id), entry: selected),
             ),
           ),
         ],

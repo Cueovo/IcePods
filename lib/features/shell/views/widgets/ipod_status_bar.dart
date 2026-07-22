@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:battery_plus/battery_plus.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 class IpodStatusBar extends StatefulWidget {
@@ -198,16 +199,23 @@ class _IpodStatusBarState extends State<IpodStatusBar>
               fontFeatures: const [FontFeature.tabularFigures()],
             ),
           );
+          final networkIcon = _networkIcon;
+          final compensateAndroidWifi =
+              defaultTargetPlatform == TargetPlatform.android &&
+              networkIcon == Icons.wifi_rounded;
           final statusWidget = Row(
             key: const ValueKey('ipod-status-items'),
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                _networkIcon,
-                color: _networkConnected
-                    ? const Color(0xF2FFFFFF)
-                    : const Color(0x66FFFFFF),
-                size: metrics.iconSize,
+              Transform.translate(
+                offset: Offset(0, compensateAndroidWifi ? -1.5 : 0),
+                child: Icon(
+                  networkIcon,
+                  color: _networkConnected
+                      ? const Color(0xF2FFFFFF)
+                      : const Color(0x66FFFFFF),
+                  size: metrics.iconSize + (compensateAndroidWifi ? 1 : 0),
+                ),
               ),
               SizedBox(width: metrics.itemSpacing),
               _HorizontalBattery(
