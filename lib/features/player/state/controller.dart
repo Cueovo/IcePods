@@ -2048,12 +2048,13 @@ class QqMusicController extends ChangeNotifier {
   }
 
   Future<void> _configureAudioSession() async {
-    if (_audioSessionConfigured) {
-      return;
-    }
     final session = await AudioSession.instance;
-    await session.configure(const AudioSessionConfiguration.music());
-    _audioSessionConfigured = true;
+    if (!_audioSessionConfigured) {
+      await session.configure(const AudioSessionConfiguration.music());
+      _audioSessionConfigured = true;
+    }
+    // Re-assert exclusive music focus so iOS can keep us as the Now Playing app.
+    await session.setActive(true);
   }
 
   void _startQrPolling() {

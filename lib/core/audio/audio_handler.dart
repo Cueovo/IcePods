@@ -1,20 +1,46 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:audio_service/audio_service.dart';
+import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
 
 import 'package:qqmusic_ipod/business/entities/music.dart';
 
+/// Bridges [just_audio] into [audio_service] so iOS can treat this process as
+/// a full Now Playing app (Lock Screen / Control Center / Dynamic Island).
+///
+/// Eligibility (Apple "Becoming a now playable app"):
+/// 1. Exclusive [AudioSessionConfiguration.music] + [AudioSession.setActive]
+/// 2. Real playback via [AudioPlayer]
+/// 3. [mediaItem] + [playbackState] via audio_service native Now Playing bridge
 class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
   static const MethodChannel _deviceChannel = MethodChannel(
     'qqmusic_ipod/device',
   );
 
+  static const Set<MediaAction> _systemActions = {
+    MediaAction.play,
+    MediaAction.pause,
+    MediaAction.stop,
+    MediaAction.seek,
+    MediaAction.seekForward,
+    MediaAction.seekBackward,
+    MediaAction.skipToNext,
+    MediaAction.skipToPrevious,
+  };
+
   QqMusicAudioHandler({AudioPlayer? audioPlayer})
     : player = audioPlayer ?? AudioPlayer() {
     _subscriptions.add(player.playbackEventStream.listen(_broadcastState));
+    _subscriptions.add(
+      player.durationStream.listen((duration) {
+        if (duration != null && duration > Duration.zero) {
+          updateDuration(duration);
+        }
+      }),
+    );
   }
 
   final AudioPlayer player;
@@ -66,8 +92,13 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
     if (player.processingState == ProcessingState.completed) {
       await player.seek(Duration.zero);
     }
+    // Exclusive music session must be active before audio starts so SpringBoard
+    // can bind Now Playing UI (and Dynamic Island tap) to this app's bundle.
+    if (!await _ensureMusicSessionActive()) {
+      return;
+    }
     _broadcastOptimisticState(true);
-    unawaited(player.play());
+    await player.play();
   }
 
   @override
@@ -86,7 +117,7 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
         if (player.playing) {
           await pause();
         } else {
-          unawaited(play());
+          await play();
         }
       case MediaButton.next:
         await skipToNext();
@@ -99,7 +130,7 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
   Future<void> skipToNext() async {
     final handler = _skipHandler;
     if (handler != null) {
-      unawaited(handler(1));
+      await handler(1);
     }
   }
 
@@ -107,7 +138,7 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
   Future<void> skipToPrevious() async {
     final handler = _skipHandler;
     if (handler != null) {
-      unawaited(handler(-1));
+      await handler(-1);
     }
   }
 
@@ -119,27 +150,46 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
     playbackState.add(
       playbackState.value.copyWith(
         controls: const [],
+        systemActions: const {},
         processingState: AudioProcessingState.idle,
         playing: false,
       ),
     );
     _syncIosNowPlayingPlaybackState('stopped');
+    if (!kIsWeb) {
+      try {
+        final session = await AudioSession.instance;
+        await session.setActive(false);
+      } catch (_) {}
+    }
   }
 
   @override
   Future<void> onTaskRemoved() => stop();
 
+  /// Configure exclusive music category and activate the session.
+  ///
+  /// Returns false only when activation is refused (another app holds focus
+  /// on platforms that surface that); callers should abort play.
+  Future<bool> _ensureMusicSessionActive() async {
+    if (kIsWeb) {
+      return true;
+    }
+    try {
+      final session = await AudioSession.instance;
+      await session.configure(const AudioSessionConfiguration.music());
+      return await session.setActive(true);
+    } catch (_) {
+      return false;
+    }
+  }
+
   List<MediaControl> _controlsFor(bool isPlaying) {
-    final playPauseControl = MediaControl(
-      androidIcon: isPlaying
-          ? 'drawable/audio_service_pause'
-          : 'drawable/audio_service_play_arrow',
-      label: isPlaying ? 'Pause' : 'Play',
-      action: MediaAction.playPause,
-    );
+    // Explicit play/pause (not playPause) so iOS enables MPRemoteCommandCenter
+    // playCommand and pauseCommand  required for full Now Playing eligibility.
     return [
       MediaControl.skipToPrevious,
-      playPauseControl,
+      if (isPlaying) MediaControl.pause else MediaControl.play,
       MediaControl.skipToNext,
     ];
   }
@@ -158,11 +208,7 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
     playbackState.add(
       playbackState.value.copyWith(
         controls: _controlsFor(isPlaying),
-        systemActions: const {
-          MediaAction.seek,
-          MediaAction.seekForward,
-          MediaAction.seekBackward,
-        },
+        systemActions: _systemActions,
         androidCompactActionIndices: const [0, 1, 2],
         processingState: player.processingState == ProcessingState.idle
             ? AudioProcessingState.loading
@@ -170,7 +216,7 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
         playing: isPlaying,
         updatePosition: player.position,
         bufferedPosition: player.bufferedPosition,
-        speed: player.speed,
+        speed: isPlaying ? player.speed : 0.0,
       ),
     );
     _syncIosNowPlayingPlaybackState(isPlaying ? 'playing' : 'paused');
@@ -184,17 +230,13 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
         player.processingState != ProcessingState.completed;
     return PlaybackState(
       controls: _controlsFor(isPlaying),
-      systemActions: const {
-        MediaAction.seek,
-        MediaAction.seekForward,
-        MediaAction.seekBackward,
-      },
+      systemActions: _systemActions,
       androidCompactActionIndices: const [0, 1, 2],
       processingState: processingState,
       playing: isPlaying,
       updatePosition: player.position,
       bufferedPosition: player.bufferedPosition,
-      speed: player.speed,
+      speed: isPlaying ? player.speed : 0.0,
       queueIndex: event.currentIndex,
     );
   }
@@ -238,13 +280,17 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
     final duration =
         durationOverride ??
         (song.duration == Duration.zero ? null : song.duration);
+    final title = song.title.trim().isEmpty ? '未知歌曲' : song.title.trim();
+    final artist =
+        song.subtitle.trim().isEmpty ? '未知艺人' : song.subtitle.trim();
     return MediaItem(
       id: song.mid.isEmpty ? song.id : song.mid,
       album: 'QQ 音乐',
-      title: song.title,
-      artist: song.subtitle,
+      title: title,
+      artist: artist,
       duration: duration,
       artUri: artworkUri?.hasScheme == true ? artworkUri : null,
+      playable: true,
     );
   }
 }

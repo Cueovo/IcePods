@@ -30,13 +30,21 @@ import UIKit
           result(nil)
           return
         }
+        // Keep remote-command delivery alive while we publish state (legacy path;
+        // MPRemoteCommandCenter is still owned by audio_service).
+        UIApplication.shared.beginReceivingRemoteControlEvents()
+        let center = MPNowPlayingInfoCenter.default()
+        let rate: Double
         switch state {
         case "playing":
-          MPNowPlayingInfoCenter.default().playbackState = .playing
+          center.playbackState = .playing
+          rate = 1.0
         case "paused":
-          MPNowPlayingInfoCenter.default().playbackState = .paused
+          center.playbackState = .paused
+          rate = 0.0
         case "stopped":
-          MPNowPlayingInfoCenter.default().playbackState = .stopped
+          center.playbackState = .stopped
+          rate = 0.0
         default:
           result(FlutterError(
             code: "invalid_now_playing_state",
@@ -44,6 +52,12 @@ import UIKit
             details: nil
           ))
           return
+        }
+        // Align rate with playbackState so Lock Screen / Island progress stays consistent.
+        if var info = center.nowPlayingInfo {
+          info[MPNowPlayingInfoPropertyPlaybackRate] = rate
+          info[MPNowPlayingInfoPropertyDefaultPlaybackRate] = rate == 0 ? 1.0 : rate
+          center.nowPlayingInfo = info
         }
         result(nil)
       default:
