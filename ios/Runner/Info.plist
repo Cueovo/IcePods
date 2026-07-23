@@ -79,5 +79,9 @@
 </array>
 </dict>
 </array>
+<key>NSUserActivityTypes</key>
+<array>
+<string>com.qqmusic.ipod.now-playing</string>
+</array>
 </dict>
 </plist>
