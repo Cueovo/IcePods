@@ -132,16 +132,11 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
   Future<void> onTaskRemoved() => stop();
 
   List<MediaControl> _controlsFor(bool isPlaying) {
-    final playPauseControl = MediaControl(
-      androidIcon: isPlaying
-          ? 'drawable/audio_service_pause'
-          : 'drawable/audio_service_play_arrow',
-      label: isPlaying ? 'Pause' : 'Play',
-      action: MediaAction.playPause,
-    );
+    final isIos = !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
     return [
       MediaControl.skipToPrevious,
-      playPauseControl,
+      if (isIos || !isPlaying) MediaControl.play,
+      if (isIos || isPlaying) MediaControl.pause,
       MediaControl.skipToNext,
     ];
   }
