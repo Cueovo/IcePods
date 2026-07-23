@@ -12,6 +12,15 @@ import UIKit
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
+  // Live Activity / custom scheme deep link (qqmusicpod://nowplaying).
+  override func application(
+    _ app: UIApplication,
+    open url: URL,
+    options: [UIApplication.OpenURLOptionsKey: Any] = [:]
+  ) -> Bool {
+    return super.application(app, open: url, options: options)
+  }
+
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
 
@@ -30,8 +39,6 @@ import UIKit
           result(nil)
           return
         }
-        // Keep remote-command delivery alive while we publish state (legacy path;
-        // MPRemoteCommandCenter is still owned by audio_service).
         UIApplication.shared.beginReceivingRemoteControlEvents()
         let center = MPNowPlayingInfoCenter.default()
         let rate: Double
@@ -53,12 +60,30 @@ import UIKit
           ))
           return
         }
-        // Align rate with playbackState so Lock Screen / Island progress stays consistent.
         if var info = center.nowPlayingInfo {
           info[MPNowPlayingInfoPropertyPlaybackRate] = rate
           info[MPNowPlayingInfoPropertyDefaultPlaybackRate] = rate == 0 ? 1.0 : rate
           center.nowPlayingInfo = info
         }
+        result(nil)
+      case "upsertLiveActivity":
+        guard let args = call.arguments as? [String: Any] else {
+          result(nil)
+          return
+        }
+        let title = args["title"] as? String ?? ""
+        let artist = args["artist"] as? String ?? ""
+        let isPlaying = args["isPlaying"] as? Bool ?? false
+        let songId = args["songId"] as? String ?? ""
+        NowPlayingLiveActivityManager.upsert(
+          title: title,
+          artist: artist,
+          isPlaying: isPlaying,
+          songId: songId
+        )
+        result(nil)
+      case "endLiveActivity":
+        NowPlayingLiveActivityManager.endAll()
         result(nil)
       default:
         result(FlutterMethodNotImplemented)

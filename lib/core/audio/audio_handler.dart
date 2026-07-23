@@ -69,6 +69,7 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
         player.duration ??
         (song.duration > Duration.zero ? song.duration : null);
     mediaItem.add(_mediaItemFor(song, durationOverride: resolvedDuration));
+    _syncIosLiveActivity(isPlaying: player.playing);
   }
 
   /// Push a known duration onto the current [MediaItem] (e.g. after the
@@ -156,6 +157,7 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
       ),
     );
     _syncIosNowPlayingPlaybackState('stopped');
+    _endIosLiveActivity();
     if (!kIsWeb) {
       try {
         final session = await AudioSession.instance;
@@ -220,6 +222,7 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
       ),
     );
     _syncIosNowPlayingPlaybackState(isPlaying ? 'playing' : 'paused');
+    _syncIosLiveActivity(isPlaying: isPlaying);
   }
 
   PlaybackState _stateFor(PlaybackEvent event) {
@@ -249,6 +252,11 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
       _ => state.playing ? 'playing' : 'paused',
     };
     _syncIosNowPlayingPlaybackState(nowPlayingState);
+    if (nowPlayingState == 'stopped') {
+      _endIosLiveActivity();
+    } else {
+      _syncIosLiveActivity(isPlaying: state.playing);
+    }
   }
 
   void _syncIosNowPlayingPlaybackState(String state) {
@@ -269,6 +277,49 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
     } on MissingPluginException {
       return;
     }
+  }
+
+  /// TrollStore/sideload: system Now Playing tap does not activate the app.
+  /// Live Activity + widgetURL is the supported deep-link path.
+  void _syncIosLiveActivity({required bool isPlaying}) {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) {
+      return;
+    }
+    final song = currentSong;
+    if (song == null) {
+      _endIosLiveActivity();
+      return;
+    }
+    unawaited(() async {
+      try {
+        await _deviceChannel.invokeMethod<void>('upsertLiveActivity', {
+          'title': song.title.trim().isEmpty ? '未知歌曲' : song.title.trim(),
+          'artist':
+              song.subtitle.trim().isEmpty ? '未知艺人' : song.subtitle.trim(),
+          'isPlaying': isPlaying,
+          'songId': song.mid.isEmpty ? song.id : song.mid,
+        });
+      } on PlatformException {
+        return;
+      } on MissingPluginException {
+        return;
+      }
+    }());
+  }
+
+  void _endIosLiveActivity() {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) {
+      return;
+    }
+    unawaited(() async {
+      try {
+        await _deviceChannel.invokeMethod<void>('endLiveActivity');
+      } on PlatformException {
+        return;
+      } on MissingPluginException {
+        return;
+      }
+    }());
   }
 
   MediaItem _mediaItemFor(QqMusicItem song, {Duration? durationOverride}) {
