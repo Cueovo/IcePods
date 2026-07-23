@@ -4,37 +4,42 @@ import MediaPlayer
 import UIKit
 
 @main
-@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+@objc class AppDelegate: FlutterAppDelegate {
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
     application.beginReceivingRemoteControlEvents()
-    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    GeneratedPluginRegistrant.register(with: self)
+
+    let launched = super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    Self.registerDeviceChannel(window: window)
+    return launched
   }
 
-  func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
-    GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+  private static func registerDeviceChannel(window: UIWindow?) {
+    guard let controller = window?.rootViewController as? FlutterViewController else {
+      return
+    }
 
-    // Expose UIScreen continuous corner radius so the framed glass can sit
-    // concentrically inside the physical display curve (14 Pro Max 鈮?55pt, etc.).
     let channel = FlutterMethodChannel(
       name: "qqmusic_ipod/device",
-      binaryMessenger: engineBridge.applicationRegistrar.messenger()
+      binaryMessenger: controller.binaryMessenger
     )
     channel.setMethodCallHandler { call, result in
       switch call.method {
       case "displayCornerRadius":
-        result(Self.displayCornerRadius())
+        result(displayCornerRadius())
       case "claimNowPlaying":
         let playing = (call.arguments as? [String: Any])?["playing"] as? Bool ?? true
-        result(Self.claimNowPlaying(playing: playing))
+        result(claimNowPlaying(playing: playing))
       default:
         result(FlutterMethodNotImplemented)
       }
     }
   }
 
+  /// Activate a non-mixable playback session and refresh Now Playing ownership.
   private static func claimNowPlaying(playing: Bool) -> Bool {
     let session = AVAudioSession.sharedInstance()
     do {
@@ -58,12 +63,9 @@ import UIKit
     return true
   }
 
-  /// Reads Apple's continuous display corner radius (logical points).
-  ///
-  /// Prefer public-ish KVC keys; fall back to 0 so Dart uses its heuristic table.
+  /// Reads Apple continuous display corner radius (logical points).
   private static func displayCornerRadius() -> Double {
     let screen = UIScreen.main
-    // Newer SDKs / runtimes may expose without underscore.
     if let value = screen.value(forKey: "displayCornerRadius") as? CGFloat, value > 0 {
       return Double(value)
     }
