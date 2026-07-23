@@ -12,9 +12,6 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
   QqMusicAudioHandler({AudioPlayer? audioPlayer})
     : player = audioPlayer ?? AudioPlayer() {
     _subscriptions.add(player.playbackEventStream.listen(_broadcastState));
-    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
-      _deviceChannel.setMethodCallHandler(_handleNativeRemoteCommand);
-    }
   }
 
   static const MethodChannel _deviceChannel = MethodChannel(
@@ -23,7 +20,6 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
 
   final AudioPlayer player;
   final List<StreamSubscription<Object?>> _subscriptions = [];
-  Timer? _iosNowPlayingReclaimTimer;
 
   QqMusicItem? currentSong;
   Future<void> Function(int direction)? _skipHandler;
@@ -83,13 +79,11 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
       await _claimIosNowPlaying(playing: true);
       _broadcastOptimisticState(true);
-      _scheduleIosNowPlayingReclaim();
     }
   }
 
   @override
   Future<void> pause() async {
-    _iosNowPlayingReclaimTimer?.cancel();
     _broadcastOptimisticState(false);
     await player.pause();
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
@@ -156,52 +150,6 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
       });
     } on PlatformException {
       return;
-    }
-  }
-
-  void _scheduleIosNowPlayingReclaim() {
-    _iosNowPlayingReclaimTimer?.cancel();
-    _iosNowPlayingReclaimTimer = Timer(const Duration(milliseconds: 900), () {
-      if (player.playing) {
-        unawaited(_claimIosNowPlaying(playing: true));
-      }
-    });
-  }
-
-  Future<dynamic> _handleNativeRemoteCommand(MethodCall call) async {
-    switch (call.method) {
-      case 'remotePlay':
-        await play();
-        return null;
-      case 'remotePause':
-        await pause();
-        return null;
-      case 'remoteToggle':
-        if (player.playing) {
-          await pause();
-        } else {
-          await play();
-        }
-        return null;
-      case 'remoteNext':
-        await skipToNext();
-        return null;
-      case 'remotePrevious':
-        await skipToPrevious();
-        return null;
-      case 'remoteSeek':
-        final args = call.arguments;
-        final positionMs =
-            args is Map ? (args['positionMs'] as num?)?.toInt() : null;
-        if (positionMs != null) {
-          await seek(Duration(milliseconds: positionMs));
-        }
-        return null;
-      default:
-        throw PlatformException(
-          code: 'unimplemented',
-          message: 'Unknown native remote command: ${call.method}',
-        );
     }
   }
 
