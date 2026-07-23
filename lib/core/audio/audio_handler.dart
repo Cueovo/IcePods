@@ -271,34 +271,6 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
     }
   }
 
-  // Live Activity mirrors Now Playing metadata; widgetURL wakes the app
-  // (TrollStore cannot use system Now Playing tap-to-open).
-  void _syncIosLiveActivity({required bool isPlaying}) {
-    if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) return;
-    final song = currentSong;
-    if (song == null) {
-        return;
-    }
-    unawaited(
-      _deviceChannel
-          .invokeMethod<void>('upsertLiveActivity', {
-            'title': song.title.trim().isEmpty ? '未知歌曲' : song.title.trim(),
-            'artist':
-                song.subtitle.trim().isEmpty ? '未知艺人' : song.subtitle.trim(),
-            'isPlaying': isPlaying,
-            'songId': song.mid.isEmpty ? song.id : song.mid,
-          })
-          .catchError((_) {}),
-    );
-  }
-
-  void _endIosLiveActivity() {
-    if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) return;
-    unawaited(
-      _deviceChannel.invokeMethod<void>('endLiveActivity').catchError((_) {}),
-    );
-  }
-
   MediaItem _mediaItemFor(QqMusicItem song, {Duration? durationOverride}) {
     final artworkUrl = song.imageUrl.replaceFirst(
       RegExp(r'^http://y\.gtimg\.cn/'),
