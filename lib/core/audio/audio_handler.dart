@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:audio_service/audio_service.dart';
-import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
@@ -9,14 +8,14 @@ import 'package:just_audio/just_audio.dart';
 import 'package:qqmusic_ipod/business/entities/music.dart';
 
 class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
+  static const MethodChannel _deviceChannel = MethodChannel(
+    'qqmusic_ipod/device',
+  );
+
   QqMusicAudioHandler({AudioPlayer? audioPlayer})
     : player = audioPlayer ?? AudioPlayer() {
     _subscriptions.add(player.playbackEventStream.listen(_broadcastState));
   }
-
-  static const MethodChannel _deviceChannel = MethodChannel(
-    'qqmusic_ipod/device',
-  );
 
   final AudioPlayer player;
   final List<StreamSubscription<Object?>> _subscriptions = [];
@@ -67,28 +66,14 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
     if (player.processingState == ProcessingState.completed) {
       await player.seek(Duration.zero);
     }
-    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
-      final session = await AudioSession.instance;
-      await session.configure(const AudioSessionConfiguration.music());
-      if (!await session.setActive(true)) {
-        return;
-      }
-    }
     _broadcastOptimisticState(true);
-    await player.play();
-    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
-      await _claimIosNowPlaying(playing: true);
-      _broadcastOptimisticState(true);
-    }
+    unawaited(player.play());
   }
 
   @override
   Future<void> pause() async {
     _broadcastOptimisticState(false);
     await player.pause();
-    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
-      await _claimIosNowPlaying(playing: false);
-    }
   }
 
   @override
@@ -138,27 +123,23 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
         playing: false,
       ),
     );
+    _syncIosNowPlayingPlaybackState('stopped');
   }
 
   @override
   Future<void> onTaskRemoved() => stop();
 
-  Future<void> _claimIosNowPlaying({required bool playing}) async {
-    try {
-      await _deviceChannel.invokeMethod<bool>('claimNowPlaying', {
-        'playing': playing,
-      });
-    } on PlatformException {
-      return;
-    }
-  }
-
   List<MediaControl> _controlsFor(bool isPlaying) {
-    final isIos = !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+    final playPauseControl = MediaControl(
+      androidIcon: isPlaying
+          ? 'drawable/audio_service_pause'
+          : 'drawable/audio_service_play_arrow',
+      label: isPlaying ? 'Pause' : 'Play',
+      action: MediaAction.playPause,
+    );
     return [
       MediaControl.skipToPrevious,
-      if (isIos || !isPlaying) MediaControl.play,
-      if (isIos || isPlaying) MediaControl.pause,
+      playPauseControl,
       MediaControl.skipToNext,
     ];
   }
@@ -192,6 +173,7 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
         speed: player.speed,
       ),
     );
+    _syncIosNowPlayingPlaybackState(isPlaying ? 'playing' : 'paused');
   }
 
   PlaybackState _stateFor(PlaybackEvent event) {
@@ -218,7 +200,33 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
   }
 
   void _broadcastState(PlaybackEvent event) {
-    playbackState.add(_stateFor(event));
+    final state = _stateFor(event);
+    playbackState.add(state);
+    final nowPlayingState = switch (state.processingState) {
+      AudioProcessingState.idle || AudioProcessingState.completed => 'stopped',
+      _ => state.playing ? 'playing' : 'paused',
+    };
+    _syncIosNowPlayingPlaybackState(nowPlayingState);
+  }
+
+  void _syncIosNowPlayingPlaybackState(String state) {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) {
+      return;
+    }
+    unawaited(_setIosNowPlayingPlaybackState(state));
+  }
+
+  Future<void> _setIosNowPlayingPlaybackState(String state) async {
+    try {
+      await _deviceChannel.invokeMethod<void>(
+        'setNowPlayingPlaybackState',
+        state,
+      );
+    } on PlatformException {
+      return;
+    } on MissingPluginException {
+      return;
+    }
   }
 
   MediaItem _mediaItemFor(QqMusicItem song, {Duration? durationOverride}) {
