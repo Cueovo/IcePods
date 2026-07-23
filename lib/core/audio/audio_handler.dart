@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
 
 import 'package:qqmusic_ipod/business/entities/music.dart';
@@ -12,6 +13,10 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
     : player = audioPlayer ?? AudioPlayer() {
     _subscriptions.add(player.playbackEventStream.listen(_broadcastState));
   }
+
+  static const MethodChannel _deviceChannel = MethodChannel(
+    'qqmusic_ipod/device',
+  );
 
   final AudioPlayer player;
   final List<StreamSubscription<Object?>> _subscriptions = [];
@@ -70,13 +75,20 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
       }
     }
     _broadcastOptimisticState(true);
-    unawaited(player.play());
+    await player.play();
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+      await _claimIosNowPlaying(playing: true);
+      _broadcastOptimisticState(true);
+    }
   }
 
   @override
   Future<void> pause() async {
     _broadcastOptimisticState(false);
     await player.pause();
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+      await _claimIosNowPlaying(playing: false);
+    }
   }
 
   @override
@@ -130,6 +142,16 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
 
   @override
   Future<void> onTaskRemoved() => stop();
+
+  Future<void> _claimIosNowPlaying({required bool playing}) async {
+    try {
+      await _deviceChannel.invokeMethod<bool>('claimNowPlaying', {
+        'playing': playing,
+      });
+    } on PlatformException {
+      return;
+    }
+  }
 
   List<MediaControl> _controlsFor(bool isPlaying) {
     final isIos = !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
