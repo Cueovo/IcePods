@@ -57,25 +57,6 @@ import UIKit
           center.nowPlayingInfo = info
         }
         result(nil)
-      case "upsertLiveActivity":
-        guard let args = call.arguments as? [String: Any] else {
-          result(nil)
-          return
-        }
-        let title = args["title"] as? String ?? ""
-        let artist = args["artist"] as? String ?? ""
-        let isPlaying = args["isPlaying"] as? Bool ?? false
-        let songId = args["songId"] as? String ?? ""
-        NowPlayingLiveActivityManager.upsert(
-          title: title,
-          artist: artist,
-          isPlaying: isPlaying,
-          songId: songId
-        )
-        result(nil)
-      case "endLiveActivity":
-        NowPlayingLiveActivityManager.endAll()
-        result(nil)
       default:
         result(FlutterMethodNotImplemented)
       }

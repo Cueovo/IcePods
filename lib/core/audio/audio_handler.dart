@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
@@ -69,7 +69,6 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
         player.duration ??
         (song.duration > Duration.zero ? song.duration : null);
     mediaItem.add(_mediaItemFor(song, durationOverride: resolvedDuration));
-    _syncIosLiveActivity(isPlaying: player.playing);
   }
 
   /// Push a known duration onto the current [MediaItem] (e.g. after the
@@ -157,7 +156,6 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
       ),
     );
     _syncIosNowPlayingPlaybackState('stopped');
-    _endIosLiveActivity();
     if (!kIsWeb) {
       try {
         final session = await AudioSession.instance;
@@ -222,7 +220,6 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
       ),
     );
     _syncIosNowPlayingPlaybackState(isPlaying ? 'playing' : 'paused');
-    _syncIosLiveActivity(isPlaying: isPlaying);
   }
 
   PlaybackState _stateFor(PlaybackEvent event) {
@@ -252,11 +249,6 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
       _ => state.playing ? 'playing' : 'paused',
     };
     _syncIosNowPlayingPlaybackState(nowPlayingState);
-    if (nowPlayingState == 'stopped') {
-      _endIosLiveActivity();
-    } else {
-      _syncIosLiveActivity(isPlaying: state.playing);
-    }
   }
 
   void _syncIosNowPlayingPlaybackState(String state) {
@@ -285,8 +277,7 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) return;
     final song = currentSong;
     if (song == null) {
-      _endIosLiveActivity();
-      return;
+        return;
     }
     unawaited(
       _deviceChannel
