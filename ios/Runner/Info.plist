@@ -93,7 +93,7 @@
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>CFBundleURLName</key>
-			<string>com.qqmusic.ipod.login</string>
+			<string>qqmusicpod</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>qqmusicpod</string>
