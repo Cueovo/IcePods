@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 import 'package:qqmusic_ipod/business/repositories/music_repository.dart';
@@ -57,6 +58,13 @@ class _IpodScreenState extends State<IpodScreen> with WidgetsBindingObserver {
       _hideSystemStatusBar();
       _shell.music.onAppResumed();
       _showSceneDiagIfAny();
+      // The Flutter rendering surface may be stale after background audio.
+      // Schedule two consecutive frames: the first rebuilds the widget tree,
+      // the second ensures the GPU surface has flushed a real drawable.
+      SchedulerBinding.instance.scheduleFrame();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        SchedulerBinding.instance.scheduleFrame();
+      });
     }
   }
 

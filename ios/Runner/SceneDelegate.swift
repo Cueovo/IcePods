@@ -54,6 +54,13 @@ class SceneDelegate: FlutterSceneDelegate {
   override func sceneDidBecomeActive(_ scene: UIScene) {
     SceneDiag.log("sceneDidBecomeActive")
     super.sceneDidBecomeActive(scene)
+    // Re-assert window visibility after the Flutter engine has processed
+    // sceneWillEnterForeground — the Metal drawable may not exist yet at
+    // sceneWillEnterForeground time so a second call here covers that gap.
+    guard let windowScene = scene as? UIWindowScene else { return }
+    DispatchQueue.main.async {
+      windowScene.windows.first?.makeKeyAndVisible()
+    }
   }
 
   override func sceneWillResignActive(_ scene: UIScene) {
