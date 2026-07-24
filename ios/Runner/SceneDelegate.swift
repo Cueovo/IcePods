@@ -13,9 +13,7 @@ class SceneDelegate: FlutterSceneDelegate {
     super.scene(scene, openURLContexts: URLContexts)
     guard let windowScene = scene as? UIWindowScene else { return }
     // Bring the first Flutter window to the foreground immediately.
-    if let window = windowScene.windows.first(where: { $0 is FlutterWindow }) ?? windowScene.windows.first {
-      window.makeKeyAndVisible()
-    }
+    windowScene.windows.first?.makeKeyAndVisible()
   }
 
   override func sceneWillEnterForeground(_ scene: UIScene) {
@@ -23,8 +21,6 @@ class SceneDelegate: FlutterSceneDelegate {
     // Ensure window is key when returning from background via any path
     // (e.g. Dynamic Island tap while app is suspended).
     guard let windowScene = scene as? UIWindowScene else { return }
-    if let window = windowScene.windows.first(where: { $0 is FlutterWindow }) ?? windowScene.windows.first {
-      window.makeKeyAndVisible()
-    }
+    windowScene.windows.first?.makeKeyAndVisible()
   }
 }
