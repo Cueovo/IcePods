@@ -25,6 +25,11 @@ import UIKit
       switch call.method {
       case "displayCornerRadius":
         result(Self.displayCornerRadius())
+      case "readSceneDiag":
+        result(UserDefaults.standard.stringArray(forKey: SceneDiag.key) ?? [])
+      case "clearSceneDiag":
+        UserDefaults.standard.removeObject(forKey: SceneDiag.key)
+        result(nil)
       case "setNowPlayingPlaybackState":
         guard #available(iOS 13.0, *), let state = call.arguments as? String else {
           result(nil)

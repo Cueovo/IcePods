@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -55,7 +56,73 @@ class _IpodScreenState extends State<IpodScreen> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       _hideSystemStatusBar();
       _shell.music.onAppResumed();
+      _showSceneDiagIfAny();
     }
+  }
+
+  static const MethodChannel _diagChannel = MethodChannel('qqmusic_ipod/device');
+
+  Future<void> _showSceneDiagIfAny() async {
+    if (kIsWeb) {
+      return;
+    }
+    try {
+      if (defaultTargetPlatform != TargetPlatform.iOS) {
+        return;
+      }
+    } catch (_) {
+      return;
+    }
+    List<String> lines;
+    try {
+      final raw = await _diagChannel.invokeMethod<List<Object?>>('readSceneDiag');
+      lines = (raw ?? const []).map((e) => e.toString()).toList();
+    } catch (_) {
+      return;
+    }
+    if (lines.isEmpty || !mounted) {
+      return;
+    }
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Scene 生命周期日志'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: lines.length,
+            itemBuilder: (context, i) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: SelectableText(
+                lines[i],
+                style: const TextStyle(
+                  fontFamily: 'monospace',
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              try {
+                await _diagChannel.invokeMethod<void>('clearSceneDiag');
+              } catch (_) {}
+              if (context.mounted) {
+                Navigator.of(context).pop();
+              }
+            },
+            child: const Text('清空并关闭'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('关闭'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _hideSystemStatusBar() {
