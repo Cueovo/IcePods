@@ -15,6 +15,10 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // iOS: real continuous corner radius before first paint of the framed glass.
   await DeviceDisplayMetrics.warmUp();
+  // Configure the audio session before AudioService.init so the system
+  // recognises this as a music app from the moment the service starts.
+  final session = await AudioSession.instance;
+  await session.configure(const AudioSessionConfiguration.music());
   final audioHandler = await AudioService.init<QqMusicAudioHandler>(
     builder: QqMusicAudioHandler.new,
     config: const AudioServiceConfig(
@@ -29,8 +33,6 @@ Future<void> main() async {
       artDownscaleHeight: 512,
     ),
   );
-  final audioSession = await AudioSession.instance;
-  await audioSession.configure(const AudioSessionConfiguration.music());
   // Immersive sticky: draw under the status-bar band and keep OS icons hidden.
   // Swipe-to-reveal is transient; MainActivity also re-hides on Meizu/Flyme.
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
