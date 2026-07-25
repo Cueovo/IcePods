@@ -198,7 +198,6 @@ class QqMusicController extends ChangeNotifier {
   final Set<String> _undislikedItemIds = {};
 
   Timer? _qrPollTimer;
-  bool _audioSessionConfigured = false;
   bool _pollingQr = false;
   bool _loadingMore = false;
   bool _handlingPlaybackCompletion = false;
@@ -2048,12 +2047,8 @@ class QqMusicController extends ChangeNotifier {
   }
 
   Future<void> _configureAudioSession() async {
+    // Session is configured once in main() (Bloomee-style). Only re-activate.
     final session = await AudioSession.instance;
-    if (!_audioSessionConfigured) {
-      await session.configure(const AudioSessionConfiguration.music());
-      _audioSessionConfigured = true;
-    }
-    // Re-assert exclusive music focus so iOS can keep us as the Now Playing app.
     await session.setActive(true);
   }
 

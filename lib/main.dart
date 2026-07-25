@@ -15,10 +15,27 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // iOS: real continuous corner radius before first paint of the framed glass.
   await DeviceDisplayMetrics.warmUp();
-  // Configure the audio session before AudioService.init so the system
-  // recognises this as a music app from the moment the service starts.
+  // Match BloomeeTunes: configure session BEFORE AudioService.init so the
+  // system binds Now Playing (and Dynamic Island tap) to this process.
   final session = await AudioSession.instance;
-  await session.configure(const AudioSessionConfiguration.music());
+  await session.configure(
+    AudioSessionConfiguration(
+      avAudioSessionCategory: AVAudioSessionCategory.playback,
+      avAudioSessionCategoryOptions:
+          AVAudioSessionCategoryOptions.allowBluetooth |
+          AVAudioSessionCategoryOptions.allowAirPlay,
+      avAudioSessionMode: AVAudioSessionMode.defaultMode,
+      avAudioSessionRouteSharingPolicy:
+          AVAudioSessionRouteSharingPolicy.defaultPolicy,
+      avAudioSessionSetActiveOptions: AVAudioSessionSetActiveOptions.none,
+      androidAudioAttributes: const AndroidAudioAttributes(
+        contentType: AndroidAudioContentType.music,
+        usage: AndroidAudioUsage.media,
+      ),
+      androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
+      androidWillPauseWhenDucked: false,
+    ),
+  );
   final audioHandler = await AudioService.init<QqMusicAudioHandler>(
     builder: QqMusicAudioHandler.new,
     config: const AudioServiceConfig(

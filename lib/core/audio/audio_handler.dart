@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
 
 import 'package:qqmusic_ipod/business/entities/music.dart';
@@ -11,15 +10,10 @@ import 'package:qqmusic_ipod/business/entities/music.dart';
 /// Bridges [just_audio] into [audio_service] so iOS can treat this process as
 /// a full Now Playing app (Lock Screen / Control Center / Dynamic Island).
 ///
-/// Eligibility (Apple "Becoming a now playable app"):
-/// 1. Exclusive [AudioSessionConfiguration.music] + [AudioSession.setActive]
-/// 2. Real playback via [AudioPlayer]
-/// 3. [mediaItem] + [playbackState] via audio_service native Now Playing bridge
+/// Now Playing metadata/commands are owned exclusively by [audio_service].
+/// Do not mutate [MPNowPlayingInfoCenter] from native side — that races the
+/// plugin and can break SpringBoard's app association for Dynamic Island tap.
 class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
-  static const MethodChannel _deviceChannel = MethodChannel(
-    'qqmusic_ipod/device',
-  );
-
   static const Set<MediaAction> _systemActions = {
     MediaAction.play,
     MediaAction.pause,
@@ -155,7 +149,6 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
         playing: false,
       ),
     );
-    _syncIosNowPlayingPlaybackState('stopped');
     if (!kIsWeb) {
       try {
         final session = await AudioSession.instance;
@@ -167,17 +160,17 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
   @override
   Future<void> onTaskRemoved() => stop();
 
-  /// Configure exclusive music category and activate the session.
+  /// Activate the already-configured music session before playback.
   ///
-  /// Returns false only when activation is refused (another app holds focus
-  /// on platforms that surface that); callers should abort play.
+  /// Configuration happens once in main() (Bloomee-style). Re-calling
+  /// configure(music()) here can clobber category options and confuse
+  /// SpringBoard's Now Playing ownership.
   Future<bool> _ensureMusicSessionActive() async {
     if (kIsWeb) {
       return true;
     }
     try {
       final session = await AudioSession.instance;
-      await session.configure(const AudioSessionConfiguration.music());
       return await session.setActive(true);
     } catch (_) {
       return false;
@@ -219,7 +212,6 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
         speed: isPlaying ? player.speed : 0.0,
       ),
     );
-    _syncIosNowPlayingPlaybackState(isPlaying ? 'playing' : 'paused');
   }
 
   PlaybackState _stateFor(PlaybackEvent event) {
@@ -242,33 +234,7 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
   }
 
   void _broadcastState(PlaybackEvent event) {
-    final state = _stateFor(event);
-    playbackState.add(state);
-    final nowPlayingState = switch (state.processingState) {
-      AudioProcessingState.idle || AudioProcessingState.completed => 'stopped',
-      _ => state.playing ? 'playing' : 'paused',
-    };
-    _syncIosNowPlayingPlaybackState(nowPlayingState);
-  }
-
-  void _syncIosNowPlayingPlaybackState(String state) {
-    if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) {
-      return;
-    }
-    unawaited(_setIosNowPlayingPlaybackState(state));
-  }
-
-  Future<void> _setIosNowPlayingPlaybackState(String state) async {
-    try {
-      await _deviceChannel.invokeMethod<void>(
-        'setNowPlayingPlaybackState',
-        state,
-      );
-    } on PlatformException {
-      return;
-    } on MissingPluginException {
-      return;
-    }
+    playbackState.add(_stateFor(event));
   }
 
   MediaItem _mediaItemFor(QqMusicItem song, {Duration? durationOverride}) {
