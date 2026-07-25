@@ -1,6 +1,25 @@
 import Flutter
 import UIKit
 
-// SceneDelegate is no longer referenced by UIApplicationSceneManifest.
-// Retained as a stub in case UIScene support is re-enabled in the future.
-class SceneDelegate: FlutterSceneDelegate {}
+class SceneDelegate: FlutterSceneDelegate {
+  override func scene(
+    _ scene: UIScene,
+    openURLContexts URLContexts: Set<UIOpenURLContext>
+  ) {
+    super.scene(scene, openURLContexts: URLContexts)
+    guard let windowScene = scene as? UIWindowScene else { return }
+    windowScene.windows.first?.makeKeyAndVisible()
+  }
+
+  override func sceneWillEnterForeground(_ scene: UIScene) {
+    super.sceneWillEnterForeground(scene)
+    guard let windowScene = scene as? UIWindowScene else { return }
+    windowScene.windows.first?.makeKeyAndVisible()
+  }
+
+  override func sceneDidBecomeActive(_ scene: UIScene) {
+    super.sceneDidBecomeActive(scene)
+    guard let windowScene = scene as? UIWindowScene else { return }
+    windowScene.windows.first?.makeKeyAndVisible()
+  }
+}
