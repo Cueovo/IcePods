@@ -7,6 +7,10 @@ import UIKit
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    // audio_service never calls this. MPRemoteCommandCenter handles the button
+    // commands, but this is what registers the process as UIKit's remote-control
+    // receiver, which is a separate identity from the command targets.
+    application.beginReceivingRemoteControlEvents()
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
