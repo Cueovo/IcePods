@@ -86,6 +86,19 @@ class DeviceDisplayMetrics {
     } catch (_) {}
   }
 
+  /// Ask MediaRemote to treat this process as eligible Now Playing application.
+  static Future<void> claimNowPlayingApp([String reason = 'dart']) async {
+    if (kIsWeb) {
+      return;
+    }
+    try {
+      if (!Platform.isIOS) {
+        return;
+      }
+      await _channel.invokeMethod<void>('claimNowPlayingApp', reason);
+    } catch (_) {}
+  }
+
   /// Logs self PID + kicks off async MediaRemote PID query, then re-reads log.
   static Future<List<String>> probeWakeDiag([String reason = 'manual']) async {
     if (kIsWeb) {

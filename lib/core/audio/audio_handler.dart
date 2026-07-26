@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 
 import 'package:qqmusic_ipod/business/entities/music.dart';
+import 'package:qqmusic_ipod/core/utils/device_display_metrics.dart';
 
 /// Bridges [just_audio] into [audio_service] so iOS can treat this process as
 /// a full Now Playing app (Lock Screen / Control Center / Dynamic Island).
@@ -91,6 +92,8 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
     if (!await _ensureMusicSessionActive()) {
       return;
     }
+    // Re-assert NP app eligibility when playback starts (TrollStore / SB open path).
+    unawaited(DeviceDisplayMetrics.claimNowPlayingApp('play'));
     _broadcastOptimisticState(true);
     await player.play();
   }

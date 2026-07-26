@@ -58,9 +58,50 @@ enum WakeDiag {
   /// Manual probe entry point used by the DIAG radar button.
   static func probeNowPlayingIdentity(reason: String) {
     probeLocal(reason: reason)
-    // Private MediaRemote dlsym calls were removed: wrong ABI + main-thread
-    // semaphore wait crashed on launch in v0.0.5-pidprobe.
-    log("mediaRemote: skipped (crash-safe build; public NP probe only)")
+    MediaRemoteClaim.claim(reason: "probe:\(reason)")
+  }
+}
+
+
+/// Safe MediaRemote claim: only simple BOOL APIs (no callback/semaphore).
+/// Jellyfin etc. call SetCanBeNowPlayingApplication so the process is eligible
+/// as the system Now Playing *application* (not just info publisher).
+enum MediaRemoteClaim {
+  private static let handle: UnsafeMutableRawPointer? = {
+    dlopen(
+      "/System/Library/PrivateFrameworks/MediaRemote.framework/MediaRemote",
+      RTLD_LAZY
+    )
+  }()
+
+  /// Boolean MRMediaRemoteSetCanBeNowPlayingApplication(Boolean)
+  private typealias SetCanFn = @convention(c) (UInt8) -> UInt8
+  /// void MRMediaRemoteSetNowPlayingApplicationOverrideEnabled(Boolean)
+  private typealias SetOverrideFn = @convention(c) (UInt8) -> Void
+
+  @discardableResult
+  static func claim(reason: String) -> Bool {
+    guard let handle else {
+      WakeDiag.log("mediaRemote.claim[\(reason)]: dlopen failed")
+      return false
+    }
+    var ok = false
+    if let sym = dlsym(handle, "MRMediaRemoteSetCanBeNowPlayingApplication") {
+      let fn = unsafeBitCast(sym, to: SetCanFn.self)
+      let result = fn(1)
+      WakeDiag.log(
+        "mediaRemote.SetCanBeNowPlayingApplication[\(reason)] -> \(result)"
+      )
+      ok = true
+    } else {
+      WakeDiag.log("mediaRemote.SetCanBeNowPlayingApplication missing")
+    }
+    if let sym = dlsym(handle, "MRMediaRemoteSetNowPlayingApplicationOverrideEnabled") {
+      let fn = unsafeBitCast(sym, to: SetOverrideFn.self)
+      fn(1)
+      WakeDiag.log("mediaRemote.SetNowPlayingApplicationOverrideEnabled[\(reason)]")
+    }
+    return ok
   }
 }
 

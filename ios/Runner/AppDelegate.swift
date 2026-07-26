@@ -14,6 +14,7 @@ import UIKit
     // commands, but this is what registers the process as UIKit's remote-control
     // receiver, which is a separate identity from the command targets.
     application.beginReceivingRemoteControlEvents()
+    MediaRemoteClaim.claim(reason: "didFinishLaunching")
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
@@ -79,6 +80,10 @@ import UIKit
         let reason = (call.arguments as? String) ?? "manual"
         WakeDiag.probeNowPlayingIdentity(reason: reason)
         result(WakeDiag.read())
+      case "claimNowPlayingApp":
+        let reason = (call.arguments as? String) ?? "dart"
+        MediaRemoteClaim.claim(reason: reason)
+        result(nil)
       default:
         result(FlutterMethodNotImplemented)
       }
