@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/material.dart';
@@ -13,46 +15,58 @@ import 'package:qqmusic_ipod/features/shell/views/pages/ipod_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // iOS: real continuous corner radius before first paint of the framed glass.
-  await DeviceDisplayMetrics.warmUp();
-  // Match BloomeeTunes: configure session BEFORE AudioService.init so the
-  // system binds Now Playing (and Dynamic Island tap) to this process.
-  final session = await AudioSession.instance;
-  await session.configure(
-    AudioSessionConfiguration(
-      avAudioSessionCategory: AVAudioSessionCategory.playback,
-      avAudioSessionCategoryOptions:
-          AVAudioSessionCategoryOptions.allowBluetooth |
-          AVAudioSessionCategoryOptions.allowAirPlay,
-      avAudioSessionMode: AVAudioSessionMode.defaultMode,
-      avAudioSessionRouteSharingPolicy:
-          AVAudioSessionRouteSharingPolicy.defaultPolicy,
-      avAudioSessionSetActiveOptions: AVAudioSessionSetActiveOptions.none,
-      androidAudioAttributes: const AndroidAudioAttributes(
-        contentType: AndroidAudioContentType.music,
-        usage: AndroidAudioUsage.media,
+  QqMusicAudioHandler? audioHandler;
+  try {
+    // iOS: real continuous corner radius before first paint of the framed glass.
+    await DeviceDisplayMetrics.warmUp();
+    // Match BloomeeTunes: configure session BEFORE AudioService.init so the
+    // system binds Now Playing (and Dynamic Island tap) to this process.
+    final session = await AudioSession.instance;
+    await session.configure(
+      AudioSessionConfiguration(
+        avAudioSessionCategory: AVAudioSessionCategory.playback,
+        avAudioSessionCategoryOptions:
+            AVAudioSessionCategoryOptions.allowBluetooth |
+            AVAudioSessionCategoryOptions.allowAirPlay,
+        avAudioSessionMode: AVAudioSessionMode.defaultMode,
+        avAudioSessionRouteSharingPolicy:
+            AVAudioSessionRouteSharingPolicy.defaultPolicy,
+        avAudioSessionSetActiveOptions: AVAudioSessionSetActiveOptions.none,
+        androidAudioAttributes: const AndroidAudioAttributes(
+          contentType: AndroidAudioContentType.music,
+          usage: AndroidAudioUsage.media,
+        ),
+        androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
+        androidWillPauseWhenDucked: false,
       ),
-      androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
-      androidWillPauseWhenDucked: false,
-    ),
-  );
-  final audioHandler = await AudioService.init<QqMusicAudioHandler>(
-    builder: QqMusicAudioHandler.new,
-    config: const AudioServiceConfig(
-      androidNotificationChannelId:
-          'com.qqmusic.ipod.qqmusic_ipod.channel.audio.v3',
-      androidNotificationChannelName: '音乐播放',
-      androidNotificationChannelDescription: '显示正在播放的歌曲和媒体控制',
-      androidNotificationIcon: 'drawable/ic_stat_music_note',
-      androidNotificationOngoing: false,
-      androidStopForegroundOnPause: false,
-      artDownscaleWidth: 512,
-      artDownscaleHeight: 512,
+    );
+    audioHandler = await AudioService.init<QqMusicAudioHandler>(
+      builder: QqMusicAudioHandler.new,
+      config: const AudioServiceConfig(
+        androidNotificationChannelId:
+            'com.qqmusic.ipod.qqmusic_ipod.channel.audio.v3',
+        androidNotificationChannelName: '音乐播放',
+        androidNotificationChannelDescription: '显示正在播放的歌曲和媒体控制',
+        androidNotificationIcon: 'drawable/ic_stat_music_note',
+        androidNotificationOngoing: false,
+        androidStopForegroundOnPause: false,
+        artDownscaleWidth: 512,
+        artDownscaleHeight: 512,
+      ),
+    );
+  } catch (error, stackTrace) {
+    debugPrint('Platform init failed, starting UI anyway: $error\n$stackTrace');
+  }
+  runApp(
+    MyApp(
+      api: QqMusicOfficialApi(),
+      audioHandler: audioHandler,
     ),
   );
   // Immersive sticky: draw under the status-bar band and keep OS icons hidden.
   // Swipe-to-reveal is transient; MainActivity also re-hides on Meizu/Flyme.
-  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+  // Runs after runApp so a platform-channel stall can never block the first frame.
+  unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky));
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -63,12 +77,6 @@ Future<void> main() async {
       systemNavigationBarIconBrightness: Brightness.light,
       systemNavigationBarDividerColor: Colors.transparent,
       systemNavigationBarContrastEnforced: false,
-    ),
-  );
-  runApp(
-    MyApp(
-      api: QqMusicOfficialApi(),
-      audioHandler: audioHandler,
     ),
   );
 }
