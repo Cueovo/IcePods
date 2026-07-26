@@ -16,6 +16,7 @@ import 'package:qqmusic_ipod/features/shell/views/pages/ipod_screen.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   QqMusicAudioHandler? audioHandler;
+  Object? audioInitError;
   try {
     // iOS: real continuous corner radius before first paint of the framed glass.
     await DeviceDisplayMetrics.warmUp();
@@ -56,6 +57,7 @@ Future<void> main() async {
     );
   } catch (error, stackTrace) {
     // Never silently degrade: without a handler there is no Now Playing at all.
+    audioInitError = error;
     FlutterError.reportError(
       FlutterErrorDetails(
         exception: error,
@@ -84,6 +86,7 @@ Future<void> main() async {
     MyApp(
       api: QqMusicOfficialApi(),
       audioHandler: audioHandler,
+      audioInitError: audioInitError,
     ),
   );
 }
@@ -92,11 +95,13 @@ class MyApp extends StatelessWidget {
   const MyApp({
     required this.api,
     this.audioHandler,
+    this.audioInitError,
     super.key,
   });
 
   final QqMusicApi api;
   final QqMusicAudioHandler? audioHandler;
+  final Object? audioInitError;
 
   @override
   Widget build(BuildContext context) {
@@ -167,7 +172,60 @@ class MyApp extends StatelessWidget {
           IpodShellTheme.classic,
         ],
       ),
-      home: IpodScreen(api: api, audioHandler: audioHandler),
+      home: audioHandler == null
+          ? _AudioInitFailureScreen(error: audioInitError)
+          : IpodScreen(api: api, audioHandler: audioHandler),
+    );
+  }
+}
+
+class _AudioInitFailureScreen extends StatelessWidget {
+  const _AudioInitFailureScreen({this.error});
+
+  final Object? error;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.surface,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '音频服务初始化失败',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Now Playing / 灵动岛 依赖 audio_service。'
+                '请把下面的完整错误信息截图反馈。',
+                style: TextStyle(color: Colors.white70, fontSize: 14),
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: SelectableText(
+                    error?.toString() ?? '未捕获到异常对象（audioHandler 为 null）',
+                    style: const TextStyle(
+                      color: AppColors.error,
+                      fontSize: 13,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
