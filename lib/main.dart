@@ -26,9 +26,6 @@ Future<void> main() async {
     await session.configure(
       AudioSessionConfiguration(
         avAudioSessionCategory: AVAudioSessionCategory.playback,
-        avAudioSessionCategoryOptions:
-            AVAudioSessionCategoryOptions.allowBluetooth |
-            AVAudioSessionCategoryOptions.allowAirPlay,
         avAudioSessionMode: AVAudioSessionMode.defaultMode,
         avAudioSessionRouteSharingPolicy:
             AVAudioSessionRouteSharingPolicy.defaultPolicy,
