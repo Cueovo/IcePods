@@ -86,7 +86,7 @@ class DeviceDisplayMetrics {
     } catch (_) {}
   }
 
-  /// Logs self PID vs MediaRemote now-playing app PID and returns full log.
+  /// Logs self PID + kicks off async MediaRemote PID query, then re-reads log.
   static Future<List<String>> probeWakeDiag([String reason = 'manual']) async {
     if (kIsWeb) {
       return const [];
@@ -95,10 +95,9 @@ class DeviceDisplayMetrics {
       if (!Platform.isIOS) {
         return const [];
       }
-      final value = await _channel.invokeMethod<dynamic>('probeWakeDiag', reason);
-      if (value is List) {
-        return value.map((e) => e.toString()).toList(growable: false);
-      }
+      // Native returns immediately after local snapshot; MediaRemote lines arrive async.
+      await _channel.invokeMethod<dynamic>('probeWakeDiag', reason);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
     } catch (_) {}
     return readWakeDiag();
   }
