@@ -55,17 +55,18 @@ Future<void> main() async {
       ),
     );
   } catch (error, stackTrace) {
-    debugPrint('Platform init failed, starting UI anyway: $error\n$stackTrace');
+    // Never silently degrade: without a handler there is no Now Playing at all.
+    FlutterError.reportError(
+      FlutterErrorDetails(
+        exception: error,
+        stack: stackTrace,
+        library: 'qqmusic_ipod',
+        context: ErrorDescription('initialising audio_service'),
+      ),
+    );
   }
-  runApp(
-    MyApp(
-      api: QqMusicOfficialApi(),
-      audioHandler: audioHandler,
-    ),
-  );
   // Immersive sticky: draw under the status-bar band and keep OS icons hidden.
   // Swipe-to-reveal is transient; MainActivity also re-hides on Meizu/Flyme.
-  // Runs after runApp so a platform-channel stall can never block the first frame.
   unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky));
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
@@ -77,6 +78,12 @@ Future<void> main() async {
       systemNavigationBarIconBrightness: Brightness.light,
       systemNavigationBarDividerColor: Colors.transparent,
       systemNavigationBarContrastEnforced: false,
+    ),
+  );
+  runApp(
+    MyApp(
+      api: QqMusicOfficialApi(),
+      audioHandler: audioHandler,
     ),
   );
 }
