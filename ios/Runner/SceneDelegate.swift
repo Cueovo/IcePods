@@ -114,6 +114,7 @@ class SceneDelegate: FlutterSceneDelegate {
   override func sceneDidBecomeActive(_ scene: UIScene) {
     WakeDiag.log("scene.didBecomeActive")
     WakeDiag.probeLocal(reason: "sceneDidBecomeActive")
+    UIApplication.shared.beginReceivingRemoteControlEvents()
     super.sceneDidBecomeActive(scene)
   }
 
@@ -129,6 +130,9 @@ class SceneDelegate: FlutterSceneDelegate {
 
   override func sceneDidEnterBackground(_ scene: UIScene) {
     WakeDiag.log("scene.didEnterBackground")
+    // Keep remote-control / NP eligibility alive while background audio continues.
+    UIApplication.shared.beginReceivingRemoteControlEvents()
+    MediaRemoteClaim.claim(reason: "sceneDidEnterBackground")
     WakeDiag.probeLocal(reason: "sceneDidEnterBackground")
     super.sceneDidEnterBackground(scene)
   }

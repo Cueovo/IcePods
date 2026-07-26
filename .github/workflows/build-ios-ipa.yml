@@ -41,9 +41,18 @@ jobs:
 
       - name: Package IPA
         run: |
+          set -euo pipefail
+          APP="build/ios/iphoneos/Runner.app"
+          ENT="ios/Runner/Runner.entitlements"
+          # TrollStore re-signs but preserves entitlements from the binary.
+          # flutter --no-codesign leaves none; ad-hoc sign embeds them.
+          if [ -f "$ENT" ]; then
+            codesign -f -s - --entitlements "$ENT" "$APP"
+            codesign -d --entitlements :- "$APP" || true
+          fi
           rm -rf Payload IcePods-unsigned.ipa
           mkdir Payload
-          cp -R build/ios/iphoneos/Runner.app Payload/
+          cp -R "$APP" Payload/
           ditto -c -k --sequesterRsrc --keepParent Payload IcePods-unsigned.ipa
 
       - name: Upload IPA artifact
