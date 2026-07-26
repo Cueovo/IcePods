@@ -7,10 +7,6 @@ import UIKit
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    // audio_service never calls this itself. Without it the app is not
-    // registered as a remote-control receiver, so SpringBoard renders the
-    // Now Playing UI but will not activate the app when it is tapped.
-    application.beginReceivingRemoteControlEvents()
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
