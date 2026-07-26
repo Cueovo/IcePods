@@ -75,6 +75,10 @@ import UIKit
         let label = (call.arguments as? String) ?? "mark"
         WakeDiag.log("dart.\(label)")
         result(nil)
+      case "probeWakeDiag":
+        let reason = (call.arguments as? String) ?? "manual"
+        WakeDiag.probeNowPlayingIdentity(reason: reason)
+        result(WakeDiag.read())
       default:
         result(FlutterMethodNotImplemented)
       }

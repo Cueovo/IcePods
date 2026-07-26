@@ -85,4 +85,21 @@ class DeviceDisplayMetrics {
       await _channel.invokeMethod<void>('markWakeDiag', label);
     } catch (_) {}
   }
+
+  /// Logs self PID vs MediaRemote now-playing app PID and returns full log.
+  static Future<List<String>> probeWakeDiag([String reason = 'manual']) async {
+    if (kIsWeb) {
+      return const [];
+    }
+    try {
+      if (!Platform.isIOS) {
+        return const [];
+      }
+      final value = await _channel.invokeMethod<dynamic>('probeWakeDiag', reason);
+      if (value is List) {
+        return value.map((e) => e.toString()).toList(growable: false);
+      }
+    } catch (_) {}
+    return readWakeDiag();
+  }
 }

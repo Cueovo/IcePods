@@ -49,6 +49,18 @@ class _WakeDiagScreenState extends State<WakeDiagScreen> {
     await _reload();
   }
 
+  Future<void> _probe() async {
+    setState(() => _loading = true);
+    final lines = await DeviceDisplayMetrics.probeWakeDiag('manualProbe');
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _lines = lines;
+      _loading = false;
+    });
+  }
+
   Future<void> _copy() async {
     final text = _lines.isEmpty ? '(empty)' : _lines.join('\n');
     await Clipboard.setData(ClipboardData(text: text));
@@ -79,6 +91,11 @@ class _WakeDiagScreenState extends State<WakeDiagScreen> {
             icon: const Icon(Icons.flag_outlined),
           ),
           IconButton(
+            tooltip: 'PROBE PID',
+            onPressed: _loading ? null : _probe,
+            icon: const Icon(Icons.radar),
+          ),
+          IconButton(
             tooltip: '复制',
             onPressed: _lines.isEmpty ? null : _copy,
             icon: const Icon(Icons.copy),
@@ -96,10 +113,10 @@ class _WakeDiagScreenState extends State<WakeDiagScreen> {
           const Padding(
             padding: EdgeInsets.fromLTRB(16, 12, 16, 8),
             child: Text(
-              '测法：点 DIAG 清空  播歌  回桌面  点锁屏/控制中心/灵动岛 Now Playing  '
-              '图标进 App  再开 DIAG。\n'
-              '若点 Now Playing 时没有 willEnterForeground/didBecomeActive，'
-              '说明系统根本没激活我们。',
+              '1) 图标打开：应有 didBecomeActive（对照路径）。\n'
+              '2) 播歌后回桌面  点 Now Playing  再图标进 App：空窗期若无 active，说明系统没激活我们。\n'
+              '3) 播歌中点雷达 PROBE：看 mediaRemote.nowPlayingAppPID 与 selfPid。\n'
+              '   MATCH=系统认我们是 NP 应用；MISMATCH/NONE=归属不对。',
               style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.35),
             ),
           ),
@@ -124,13 +141,20 @@ class _WakeDiagScreenState extends State<WakeDiagScreen> {
                           line.contains('didBecomeActive') ||
                           line.contains('openURL') ||
                           line.contains('continueUserActivity') ||
-                          line.contains('willConnect');
+                          line.contains('willConnect') ||
+                          line.contains('mediaRemote') ||
+                          line.contains('probe[');
+                      final isMismatch = line.contains('MISMATCH') ||
+                          line.contains('NONE') ||
+                          line.contains('TIMEOUT');
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 4),
                         child: SelectableText(
                           line,
                           style: TextStyle(
-                            color: highlight
+                            color: isMismatch
+                                ? const Color(0xFFFF5252)
+                                : highlight
                                 ? const Color(0xFFFFEB3B)
                                 : Colors.white,
                             fontSize: 11,
