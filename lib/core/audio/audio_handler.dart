@@ -93,7 +93,7 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
       return;
     }
     // Re-assert NP app eligibility when playback starts (TrollStore / SB open path).
-    unawaited(DeviceDisplayMetrics.claimNowPlayingApp('play'));
+    unawaited(DeviceDisplayMetrics.claimNowPlayingApp());
     _broadcastOptimisticState(true);
     await player.play();
   }

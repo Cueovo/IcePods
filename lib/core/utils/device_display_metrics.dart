@@ -45,49 +45,8 @@ class DeviceDisplayMetrics {
     }
   }
 
-  /// Native scene/app lifecycle lines for Now Playing wake diagnosis.
-  static Future<List<String>> readWakeDiag() async {
-    if (kIsWeb) {
-      return const [];
-    }
-    try {
-      if (!Platform.isIOS) {
-        return const [];
-      }
-      final value = await _channel.invokeMethod<dynamic>('readWakeDiag');
-      if (value is List) {
-        return value.map((e) => e.toString()).toList(growable: false);
-      }
-    } catch (_) {}
-    return const [];
-  }
-
-  static Future<void> clearWakeDiag() async {
-    if (kIsWeb) {
-      return;
-    }
-    try {
-      if (!Platform.isIOS) {
-        return;
-      }
-      await _channel.invokeMethod<void>('clearWakeDiag');
-    } catch (_) {}
-  }
-
-  static Future<void> markWakeDiag(String label) async {
-    if (kIsWeb) {
-      return;
-    }
-    try {
-      if (!Platform.isIOS) {
-        return;
-      }
-      await _channel.invokeMethod<void>('markWakeDiag', label);
-    } catch (_) {}
-  }
-
   /// Ask MediaRemote to treat this process as eligible Now Playing application.
-  static Future<void> claimNowPlayingApp([String reason = 'dart']) async {
+  static Future<void> claimNowPlayingApp() async {
     if (kIsWeb) {
       return;
     }
@@ -95,23 +54,7 @@ class DeviceDisplayMetrics {
       if (!Platform.isIOS) {
         return;
       }
-      await _channel.invokeMethod<void>('claimNowPlayingApp', reason);
+      await _channel.invokeMethod<void>('claimNowPlayingApp');
     } catch (_) {}
-  }
-
-  /// Logs self PID + kicks off async MediaRemote PID query, then re-reads log.
-  static Future<List<String>> probeWakeDiag([String reason = 'manual']) async {
-    if (kIsWeb) {
-      return const [];
-    }
-    try {
-      if (!Platform.isIOS) {
-        return const [];
-      }
-      // Native returns immediately after local snapshot; MediaRemote lines arrive async.
-      await _channel.invokeMethod<dynamic>('probeWakeDiag', reason);
-      await Future<void>.delayed(const Duration(milliseconds: 800));
-    } catch (_) {}
-    return readWakeDiag();
   }
 }
