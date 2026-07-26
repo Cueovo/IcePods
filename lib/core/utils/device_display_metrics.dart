@@ -44,4 +44,45 @@ class DeviceDisplayMetrics {
       // Keep heuristic fallback in ScreenCornerRadius.
     }
   }
+
+  /// Native scene/app lifecycle lines for Now Playing wake diagnosis.
+  static Future<List<String>> readWakeDiag() async {
+    if (kIsWeb) {
+      return const [];
+    }
+    try {
+      if (!Platform.isIOS) {
+        return const [];
+      }
+      final value = await _channel.invokeMethod<dynamic>('readWakeDiag');
+      if (value is List) {
+        return value.map((e) => e.toString()).toList(growable: false);
+      }
+    } catch (_) {}
+    return const [];
+  }
+
+  static Future<void> clearWakeDiag() async {
+    if (kIsWeb) {
+      return;
+    }
+    try {
+      if (!Platform.isIOS) {
+        return;
+      }
+      await _channel.invokeMethod<void>('clearWakeDiag');
+    } catch (_) {}
+  }
+
+  static Future<void> markWakeDiag(String label) async {
+    if (kIsWeb) {
+      return;
+    }
+    try {
+      if (!Platform.isIOS) {
+        return;
+      }
+      await _channel.invokeMethod<void>('markWakeDiag', label);
+    } catch (_) {}
+  }
 }
