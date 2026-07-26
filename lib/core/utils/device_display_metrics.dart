@@ -110,7 +110,7 @@ class DeviceDisplayMetrics {
       }
       // Native returns immediately after local snapshot; MediaRemote lines arrive async.
       await _channel.invokeMethod<dynamic>('probeWakeDiag', reason);
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await Future<void>.delayed(const Duration(milliseconds: 800));
     } catch (_) {}
     return readWakeDiag();
   }
