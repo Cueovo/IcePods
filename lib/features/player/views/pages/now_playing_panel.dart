@@ -294,7 +294,7 @@ class _NowPlayingPanelState extends State<NowPlayingPanel> {
                           '$currentTime / $totalTime',
                           key: const ValueKey('seek-preview-time'),
                           style: const TextStyle(
-                            color: Color(0xFF8DE5B9),
+                            color: Color(0xE6FFFFFF),
                             fontSize: 11,
                             fontWeight: FontWeight.w800,
                           ),
