@@ -258,9 +258,10 @@ class _IpodShellView extends StatelessWidget {
                                         physics:
                                             const NeverScrollableScrollPhysics(),
                                         children: [
-                                          HomePanel(
+                                          _MenuPageTransition(
                                             page: shell.currentMenuPage,
                                             selectedIndex: shell.menuIndex,
+                                            menuDepth: shell.menuPath.length,
                                           ),
                                           CoverFlowPanel(
                                             selectedIndex: shell.coverIndex,
@@ -332,6 +333,74 @@ BorderRadius _insetBorderRadius(BorderRadius radius, double inset) {
     bottomLeft: shrink(radius.bottomLeft),
     bottomRight: shrink(radius.bottomRight),
   );
+}
+
+class _MenuPageTransition extends StatefulWidget {
+  const _MenuPageTransition({
+    required this.page,
+    required this.selectedIndex,
+    required this.menuDepth,
+  });
+
+  final MenuPage page;
+  final int selectedIndex;
+  final int menuDepth;
+
+  @override
+  State<_MenuPageTransition> createState() => _MenuPageTransitionState();
+}
+
+class _MenuPageTransitionState extends State<_MenuPageTransition> {
+  late bool _isForward = true;
+
+  @override
+  void didUpdateWidget(_MenuPageTransition oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.menuDepth != widget.menuDepth) {
+      _isForward = widget.menuDepth > oldWidget.menuDepth;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final enteringOffset = _isForward
+        ? const Offset(.14, 0)
+        : const Offset(-.14, 0);
+    final exitingOffset = _isForward
+        ? const Offset(-.06, 0)
+        : const Offset(.06, 0);
+    final currentKey = ValueKey(widget.page.section);
+
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 280),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      layoutBuilder: (currentChild, previousChildren) {
+        return Stack(
+          fit: StackFit.expand,
+          children: [...previousChildren, ?currentChild],
+        );
+      },
+      transitionBuilder: (child, animation) {
+        final isIncoming = child.key == currentKey;
+        final offset = isIncoming ? enteringOffset : exitingOffset;
+        return FadeTransition(
+          opacity: animation,
+          child: SlideTransition(
+            position: Tween<Offset>(begin: offset, end: Offset.zero).animate(
+              animation,
+            ),
+            child: child,
+          ),
+        );
+      },
+      child: HomePanel(
+        key: currentKey,
+        page: widget.page,
+        selectedIndex: widget.selectedIndex,
+      ),
+    );
+  }
 }
 
 class _NowPlayingHost extends StatelessWidget {
