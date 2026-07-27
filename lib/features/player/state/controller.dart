@@ -226,7 +226,9 @@ class QqMusicController extends ChangeNotifier {
   QqMusicItem? _currentSong;
   QqMusicLyrics? _lyrics;
   QqMusicPlaybackMode _playbackMode = QqMusicPlaybackMode.sequential;
-  String _audioOutputName = '';
+  String _audioOutputName = !kIsWeb && defaultTargetPlatform == TargetPlatform.android
+      ? '本机扬声器'
+      : '';
   Uri? _lastExternalUri;
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
@@ -432,6 +434,7 @@ class QqMusicController extends ChangeNotifier {
   }
 
   Future<void> initialize() async {
+    unawaited(_loadAudioOutputName());
     await _restorePlaybackState();
     try {
       await api.restoreSession();
