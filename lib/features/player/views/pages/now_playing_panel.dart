@@ -249,27 +249,20 @@ class _NowPlayingPanelState extends State<NowPlayingPanel> {
                     ),
                   ),
                   SizedBox(height: tight ? 1 : 3),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Flexible(
-                        child: Text(
-                          widget.album.artist,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: const Color(0x99FFFFFF),
-                            fontSize: artistSize,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                      if (widget.audioOutputName.isNotEmpty) ...[
-                        const SizedBox(width: 8),
-                        _AudioOutputPill(name: widget.audioOutputName),
-                      ],
-                    ],
+                  Text(
+                    widget.album.artist,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: const Color(0x99FFFFFF),
+                      fontSize: artistSize,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
+                  if (widget.audioOutputName.isNotEmpty) ...[
+                    SizedBox(height: tight ? 2 : (compact ? 4 : 6)),
+                    _AudioOutputPill(name: widget.audioOutputName),
+                  ],
                 ],
                 SizedBox(height: progressGap),
                 _PlayerProgressBar(

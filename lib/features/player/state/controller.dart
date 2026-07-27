@@ -1802,10 +1802,11 @@ class QqMusicController extends ChangeNotifier {
 
   Future<void> _loadAudioOutputName() async {
     final name = await _audioOutputNameLoader();
-    if (name != _audioOutputName) {
-      _audioOutputName = name;
-      notifyListeners();
+    if (name.isEmpty || name == _audioOutputName) {
+      return;
     }
+    _audioOutputName = name;
+    notifyListeners();
   }
 
   Future<void> seekToProgress(
