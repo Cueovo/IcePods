@@ -1,6 +1,10 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:web/web.dart' as web;
+
+import 'package:qqmusic_ipod/core/theme/widgets/artwork_image.dart';
 
 class AmbientBackground extends StatelessWidget {
   const AmbientBackground({required this.imageUrl, super.key});
@@ -9,6 +13,27 @@ class AmbientBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (imageUrl.startsWith('local://')) {
+      return ClipRect(
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            ImageFiltered(
+              imageFilter: ImageFilter.blur(sigmaX: 34, sigmaY: 34),
+              child: Transform.scale(
+                scale: 1.18,
+                child: ArtworkImage(
+                  imageUrl: imageUrl,
+                  fit: BoxFit.cover,
+                  backgroundColor: Colors.transparent,
+                ),
+              ),
+            ),
+            const ColoredBox(color: Color(0x3D000000)),
+          ],
+        ),
+      );
+    }
     final resolvedImageUrl = imageUrl.replaceFirst(
       RegExp(r'^http://y\.gtimg\.cn/'),
       'https://y.gtimg.cn/',

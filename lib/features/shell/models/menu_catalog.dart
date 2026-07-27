@@ -2,18 +2,12 @@ import 'package:qqmusic_ipod/business/entities/music.dart';
 import 'package:qqmusic_ipod/core/storage/app_settings_store.dart';
 import 'package:qqmusic_ipod/features/shell/models/ipod_models.dart';
 
-const _dailyImage =
-    'https://images.unsplash.com/photo-1493225457124-a1a2a53b111b?q=80&w=400&fit=crop';
-const _hallImage =
-    'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=400&fit=crop';
-const _libraryImage =
-    'https://images.unsplash.com/photo-1619983081563-430f63602796?q=80&w=400&fit=crop';
-const _playlistImage =
-    'https://images.unsplash.com/photo-1518609878373-06d740f60d8b?q=80&w=400&fit=crop';
-const _coverImage =
-    'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?q=80&w=400&fit=crop';
-const _settingsImage =
-    'https://images.unsplash.com/photo-1586772002130-b0f3daa6288b?q=80&w=400&fit=crop';
+const _dailyImage = 'local://menu/daily';
+const _hallImage = 'local://menu/hall';
+const _libraryImage = 'local://menu/library';
+const _playlistImage = 'local://menu/playlist';
+const _coverImage = 'local://menu/cover-flow';
+const _settingsImage = 'local://menu/settings';
 
 MenuEntry _section(
   String id,

@@ -87,37 +87,31 @@ const coverFlowLibrary = <Album>[
   Album(
     title: 'Midnight City',
     artist: 'M83',
-    imageUrl:
-        'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?q=80&w=400&fit=crop',
+    imageUrl: 'local://album/midnight-city',
   ),
   Album(
     title: 'Lover Boy 88',
     artist: 'Higher Brothers',
-    imageUrl:
-        'https://images.unsplash.com/photo-1518609878373-06d740f60d8b?q=80&w=400&fit=crop',
+    imageUrl: 'local://album/lover-boy-88',
   ),
   Album(
     title: 'Starboy',
     artist: 'The Weeknd',
-    imageUrl:
-        'https://images.unsplash.com/photo-1619983081563-430f63602796?q=80&w=400&fit=crop',
+    imageUrl: 'local://album/starboy',
   ),
   Album(
     title: 'Blinding Lights',
     artist: 'The Weeknd',
-    imageUrl:
-        'https://images.unsplash.com/photo-1493225457124-a1a2a53b111b?q=80&w=400&fit=crop',
+    imageUrl: 'local://album/blinding-lights',
   ),
   Album(
     title: 'Random Access',
     artist: 'Daft Punk',
-    imageUrl:
-        'https://images.unsplash.com/photo-1586772002130-b0f3daa6288b?q=80&w=400&fit=crop',
+    imageUrl: 'local://album/random-access',
   ),
   Album(
     title: 'Plastic Love',
     artist: 'Mariya Takeuchi',
-    imageUrl:
-        'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=400&fit=crop',
+    imageUrl: 'local://album/plastic-love',
   ),
 ];

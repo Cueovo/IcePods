@@ -47,11 +47,14 @@ class _AmbientBackgroundState extends State<AmbientBackground> {
       _qqHttpCoverHost,
       'https://y.gtimg.cn/',
     );
+    if (resolved.startsWith('local://')) {
+      _loadingImageUrl = '';
+      _displayedImageUrl = resolved;
+      return;
+    }
     if (resolved.isEmpty) {
       _loadingImageUrl = '';
-      if (_displayedImageUrl.isNotEmpty) {
-        setState(() => _displayedImageUrl = '');
-      }
+      _displayedImageUrl = '';
       return;
     }
     if (resolved == _displayedImageUrl || resolved == _loadingImageUrl) {
