@@ -319,6 +319,7 @@ class _NowPlayingPanelState extends State<NowPlayingPanel> {
                           : Icons.favorite_border_rounded,
                       tooltip: widget.isLiked ? '我喜欢' : '未喜欢',
                       active: widget.isLiked,
+                      activeColor: const Color(0xFFFF5C70),
                       dimension: actionSize,
                       onPressed: widget.onLikedPressed,
                     ),
@@ -327,6 +328,7 @@ class _NowPlayingPanelState extends State<NowPlayingPanel> {
                       icon: Icons.lyrics_rounded,
                       tooltip: _showLyrics ? '封面' : '歌词',
                       active: _showLyrics,
+                      activeColor: const Color(0xFFB9A0FF),
                       dimension: actionSize,
                       onPressed: () => _toggleLyrics(),
                     ),
@@ -343,8 +345,7 @@ class _NowPlayingPanelState extends State<NowPlayingPanel> {
                         QqMusicPlaybackMode.repeatOne => '单曲循环',
                         QqMusicPlaybackMode.shuffle => '随机播放',
                       },
-                      active:
-                          widget.playbackMode != QqMusicPlaybackMode.sequential,
+                      active: false,
                       dimension: actionSize,
                       onPressed: widget.onPlaybackModePressed,
                     ),
@@ -1195,6 +1196,7 @@ class _ActionButton extends StatelessWidget {
     required this.icon,
     required this.tooltip,
     required this.active,
+    this.activeColor = const Color(0xFF31C27C),
     this.dimension = 44,
     this.onPressed,
     super.key,
@@ -1203,12 +1205,13 @@ class _ActionButton extends StatelessWidget {
   final IconData icon;
   final String tooltip;
   final bool active;
+  final Color activeColor;
   final double dimension;
   final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
-    final color = active ? const Color(0xFF31C27C) : const Color(0xB3FFFFFF);
+    final color = active ? activeColor : const Color(0xB3FFFFFF);
     final iconSize = dimension <= 36 ? 18.0 : 22.0;
     return Tooltip(
       message: tooltip,
