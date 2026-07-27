@@ -1,47 +1,167 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
+import 'package:qqmusic_ipod/core/theme/tokens/app_tokens.dart';
 import 'package:qqmusic_ipod/core/theme/widgets/artwork_image.dart';
 
-class AmbientBackground extends StatelessWidget {
+class AmbientBackground extends StatefulWidget {
   const AmbientBackground({required this.imageUrl, super.key});
 
   final String imageUrl;
 
   @override
+  State<AmbientBackground> createState() => _AmbientBackgroundState();
+}
+
+class _AmbientBackgroundState extends State<AmbientBackground> {
+  static final RegExp _qqHttpCoverHost = RegExp(r'^http://y\.gtimg\.cn/');
+  static const _accents = [
+    Color(0xFF31C27C),
+    Color(0xFF5A8DEE),
+    Color(0xFFE15D8A),
+    Color(0xFFF0A44B),
+    Color(0xFF8B6BE8),
+  ];
+
+  String _displayedImageUrl = '';
+  String _loadingImageUrl = '';
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _loadRequestedImage();
+  }
+
+  @override
+  void didUpdateWidget(AmbientBackground oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.imageUrl != widget.imageUrl) {
+      _loadRequestedImage();
+    }
+  }
+
+  void _loadRequestedImage() {
+    final resolved = widget.imageUrl.replaceFirst(
+      _qqHttpCoverHost,
+      'https://y.gtimg.cn/',
+    );
+    if (resolved.isEmpty) {
+      _loadingImageUrl = '';
+      if (_displayedImageUrl.isNotEmpty) {
+        setState(() => _displayedImageUrl = '');
+      }
+      return;
+    }
+    if (resolved == _displayedImageUrl || resolved == _loadingImageUrl) {
+      return;
+    }
+    _loadingImageUrl = resolved;
+    final size = MediaQuery.sizeOf(context);
+    final pixelRatio = MediaQuery.devicePixelRatioOf(context);
+    final provider = ResizeImage.resizeIfNeeded(
+      (size.width * pixelRatio / 2).round(),
+      (size.height * pixelRatio / 2).round(),
+      NetworkImage(resolved),
+    );
+    var failed = false;
+    unawaited(
+      precacheImage(
+        provider,
+        context,
+        onError: (error, stackTrace) {
+          failed = true;
+          if (_loadingImageUrl == resolved) {
+            _loadingImageUrl = '';
+          }
+        },
+      ).then((_) {
+        if (!mounted || failed || _loadingImageUrl != resolved) {
+          return;
+        }
+        setState(() {
+          _displayedImageUrl = resolved;
+          _loadingImageUrl = '';
+        });
+      }),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     final screenSize = MediaQuery.sizeOf(context);
+    final seed = widget.imageUrl.codeUnits.fold<int>(
+      0,
+      (sum, value) => sum + value,
+    );
+    final accent = _accents[seed % _accents.length];
     return ClipRect(
       child: Stack(
         fit: StackFit.expand,
         children: [
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 750),
-            switchInCurve: Curves.easeOutCubic,
-            switchOutCurve: Curves.easeInCubic,
-            layoutBuilder: (currentChild, previousChildren) => Stack(
-              fit: StackFit.expand,
-              children: [...previousChildren, ?currentChild],
-            ),
-            child: RepaintBoundary(
-              key: ValueKey(imageUrl),
-              child: ImageFiltered(
-                imageFilter: ImageFilter.blur(sigmaX: 44, sigmaY: 44),
-                child: Transform.scale(
-                  scale: 1.24,
-                  child: ArtworkImage(
-                    imageUrl: imageUrl,
-                    fit: BoxFit.cover,
-                    backgroundColor: const Color(0xFF090A0F),
-                    cacheWidth: screenSize.width / 2,
-                    cacheHeight: screenSize.height / 2,
-                    fadeIn: false,
-                    filterQuality: FilterQuality.low,
-                  ),
-                ),
+          const DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF18202B),
+                  Color(0xFF11151E),
+                  Color(0xFF090A0F),
+                ],
               ),
             ),
+          ),
+          AnimatedContainer(
+            duration: AppDurations.standard,
+            curve: AppCurves.standard,
+            decoration: BoxDecoration(
+              gradient: RadialGradient(
+                center: const Alignment(-.62, -.72),
+                radius: 1.28,
+                colors: [
+                  accent.withValues(alpha: .46),
+                  accent.withValues(alpha: .12),
+                  Colors.transparent,
+                ],
+                stops: const [0, .46, 1],
+              ),
+            ),
+          ),
+          AnimatedSwitcher(
+            duration: AppDurations.emphasized,
+            switchInCurve: AppCurves.menuPage,
+            switchOutCurve: AppCurves.standard,
+            layoutBuilder: (currentChild, previousChildren) => Stack(
+              fit: StackFit.expand,
+              children: [
+                if (previousChildren.isNotEmpty) previousChildren.last,
+                ?currentChild,
+              ],
+            ),
+            child: _displayedImageUrl.isEmpty
+                ? const SizedBox.expand(
+                    key: ValueKey('ambient-local-placeholder'),
+                  )
+                : RepaintBoundary(
+                    key: ValueKey(_displayedImageUrl),
+                    child: ImageFiltered(
+                      imageFilter: ImageFilter.blur(sigmaX: 44, sigmaY: 44),
+                      child: Transform.scale(
+                        scale: 1.24,
+                        child: ArtworkImage(
+                          imageUrl: _displayedImageUrl,
+                          fit: BoxFit.cover,
+                          backgroundColor: Colors.transparent,
+                          cacheWidth: screenSize.width / 2,
+                          cacheHeight: screenSize.height / 2,
+                          fadeIn: false,
+                          filterQuality: FilterQuality.low,
+                        ),
+                      ),
+                    ),
+                  ),
           ),
           // Lighter dim so status bar + preview share the same ambient wash.
           const ColoredBox(color: Color(0x3D000000)),

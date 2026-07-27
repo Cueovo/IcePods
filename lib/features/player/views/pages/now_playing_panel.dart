@@ -58,9 +58,14 @@ class NowPlayingPanel extends StatefulWidget {
 class _NowPlayingPanelState extends State<NowPlayingPanel> {
   bool _showLyrics = false;
   double _horizontalDrag = 0;
+  int _contentDirection = 1;
 
-  void _toggleLyrics() {
-    setState(() => _showLyrics = !_showLyrics);
+  void _toggleLyrics({int? direction}) {
+    setState(() {
+      final nextShowLyrics = !_showLyrics;
+      _contentDirection = direction ?? (nextShowLyrics ? 1 : -1);
+      _showLyrics = nextShowLyrics;
+    });
     widget.onLyricsPressed?.call();
   }
 
@@ -71,15 +76,19 @@ class _NowPlayingPanelState extends State<NowPlayingPanel> {
     }
     final currentTime = _formatDuration(widget.position);
     final totalTime = _formatDuration(widget.duration);
+    final reduceMotion = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
     return GestureDetector(
       key: const ValueKey('now-playing-swipe-area'),
       behavior: HitTestBehavior.opaque,
+      onHorizontalDragStart: (_) => _horizontalDrag = 0,
       onHorizontalDragUpdate: (details) => _horizontalDrag += details.delta.dx,
+      onHorizontalDragCancel: () => _horizontalDrag = 0,
       onHorizontalDragEnd: (_) {
-        if (_horizontalDrag.abs() > 45) {
-          _toggleLyrics();
-        }
+        final drag = _horizontalDrag;
         _horizontalDrag = 0;
+        if (drag.abs() > 45) {
+          _toggleLyrics(direction: drag < 0 ? 1 : -1);
+        }
       },
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -122,25 +131,103 @@ class _NowPlayingPanelState extends State<NowPlayingPanel> {
             child: Column(
               children: [
                 Expanded(
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 280),
-                    child: _showLyrics
-                        ? _LyricsView(
-                            key: const ValueKey('player-lyrics'),
-                            lyrics: widget.lyrics,
-                            position: widget.position,
-                            isLoading: widget.isLoadingLyrics,
-                            isSeeking: widget.isSeeking,
-                            isPlaying:
-                                widget.isPlaying &&
-                                !widget.isBuffering &&
-                                !widget.isSeeking,
-                          )
-                        : _ArtworkView(
-                            key: const ValueKey('player-artwork-view'),
-                            album: widget.album,
-                            rotationDelta: widget.rotationDelta,
+                  child: ClipRect(
+                    child: AnimatedSwitcher(
+                      duration: reduceMotion
+                          ? AppDurations.reducedMotion
+                          : AppDurations.standard,
+                      layoutBuilder: (currentChild, previousChildren) {
+                        return Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            if (previousChildren.isNotEmpty)
+                              previousChildren.last,
+                            ?currentChild,
+                          ],
+                        );
+                      },
+                      transitionBuilder: (child, animation) {
+                        final currentKey = ValueKey(
+                          _showLyrics
+                              ? 'player-lyrics'
+                              : 'player-artwork-view',
+                        );
+                        final isIncoming = child.key == currentKey;
+                        final progress = isIncoming
+                            ? animation
+                            : ReverseAnimation(animation);
+                        final direction = reduceMotion
+                            ? 0.0
+                            : _contentDirection.toDouble();
+                        final position = Tween<Offset>(
+                          begin: isIncoming
+                              ? Offset(.065 * direction, 0)
+                              : Offset.zero,
+                          end: isIncoming
+                              ? Offset.zero
+                              : Offset(-.032 * direction, 0),
+                        ).animate(
+                          CurvedAnimation(
+                            parent: progress,
+                            curve: AppCurves.menuPage,
                           ),
+                        );
+                        final opacity = Tween<double>(
+                          begin: isIncoming ? 0 : 1,
+                          end: isIncoming ? 1 : 0,
+                        ).animate(
+                          CurvedAnimation(
+                            parent: progress,
+                            curve: Interval(
+                              isIncoming ? .12 : 0,
+                              isIncoming ? .82 : .42,
+                              curve: AppCurves.strongEaseOut,
+                            ),
+                          ),
+                        );
+                        final scale = Tween<double>(
+                          begin: reduceMotion
+                              ? 1
+                              : isIncoming
+                              ? .985
+                              : 1,
+                          end: reduceMotion
+                              ? 1
+                              : isIncoming
+                              ? 1
+                              : .97,
+                        ).animate(
+                          CurvedAnimation(
+                            parent: progress,
+                            curve: AppCurves.menuPage,
+                          ),
+                        );
+                        return FadeTransition(
+                          opacity: opacity,
+                          child: SlideTransition(
+                            position: position,
+                            child: ScaleTransition(scale: scale, child: child),
+                          ),
+                        );
+                      },
+                      child: _showLyrics
+                          ? _LyricsView(
+                              key: const ValueKey('player-lyrics'),
+                              lyrics: widget.lyrics,
+                              position: widget.position,
+                              isLoading: widget.isLoadingLyrics,
+                              isSeeking: widget.isSeeking,
+                              isPlaying:
+                                  widget.isPlaying &&
+                                  !widget.isBuffering &&
+                                  !widget.isSeeking,
+                            )
+                          : _ArtworkView(
+                              key: const ValueKey('player-artwork-view'),
+                              album: widget.album,
+                              rotationDelta: widget.rotationDelta,
+                            ),
+                    ),
                   ),
                 ),
                 SizedBox(height: titleGap),
@@ -241,7 +328,7 @@ class _NowPlayingPanelState extends State<NowPlayingPanel> {
                       tooltip: _showLyrics ? '封面' : '歌词',
                       active: _showLyrics,
                       dimension: actionSize,
-                      onPressed: _toggleLyrics,
+                      onPressed: () => _toggleLyrics(),
                     ),
                     _ActionButton(
                       key: const ValueKey('player-mode-button'),
