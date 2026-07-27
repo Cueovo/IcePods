@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:math';
 
 import 'package:audio_session/audio_session.dart';
@@ -135,13 +135,12 @@ class QqMusicController extends ChangeNotifier {
       (durationStream ?? _audioPlayer.durationStream).listen((duration) {
         // Prefer the live player duration — home-feed songs often ship with
         // duration=0 in the card payload.
-        final resolved =
-            (duration != null && duration > Duration.zero)
-                ? duration
-                : (_audioPlayer.duration != null &&
-                      _audioPlayer.duration! > Duration.zero)
-                ? _audioPlayer.duration!
-                : (_currentSong?.duration ?? Duration.zero);
+        final resolved = (duration != null && duration > Duration.zero)
+            ? duration
+            : (_audioPlayer.duration != null &&
+                  _audioPlayer.duration! > Duration.zero)
+            ? _audioPlayer.duration!
+            : (_currentSong?.duration ?? Duration.zero);
         if (resolved > Duration.zero) {
           _duration = resolved;
           _audioHandler?.updateDuration(resolved);
@@ -190,6 +189,7 @@ class QqMusicController extends ChangeNotifier {
   final Map<String, QqMusicFeatureResult> _childrenCache = {};
   final Map<String, _PrefetchedPlayableUrl> _prefetchedPlayableUrls = {};
   final Map<String, QqMusicLyrics> _lyricsCache = {};
+  final Map<String, bool> _likedStatusCache = {};
   final Set<String> _unavailableSongKeys = {};
   List<QqMusicItem> _playbackQueue = const [];
   final Set<String> _favoritePlaylistIds = {};
@@ -214,6 +214,8 @@ class QqMusicController extends ChangeNotifier {
   bool _isBuffering = false;
   bool _isLoadingLyrics = false;
   bool _currentSongFromLiked = false;
+  bool? _currentSongLikedStatus;
+  int _likedStatusRevision = 0;
   String _error = '';
   String _playbackError = '';
   String _statusMessage = '';
@@ -263,11 +265,20 @@ class QqMusicController extends ChangeNotifier {
     if (song == null) {
       return false;
     }
+    return _currentSongLikedStatus ??
+        _likedStatusFromFeatureCache(song) ??
+        _currentSongFromLiked;
+  }
+
+  bool? _likedStatusFromFeatureCache(QqMusicItem song) {
     final liked = _featureCache[QqMusicFeature.likedSongs];
-    if (liked != null) {
-      return liked.items.any((item) => _sameSong(item, song));
+    if (liked == null) {
+      return null;
     }
-    return _currentSongFromLiked;
+    if (liked.items.any((item) => _sameSong(item, song))) {
+      return true;
+    }
+    return liked.hasMore ? null : false;
   }
 
   Uri? get lastExternalUri => _lastExternalUri;
@@ -450,6 +461,7 @@ class QqMusicController extends ChangeNotifier {
     await _loadRememberedAudioSource(silent: true);
     final restoredSong = _currentSong;
     if (restoredSong != null) {
+      _prepareCurrentSongLikedStatus(restoredSong);
       unawaited(_loadLyrics(restoredSong));
       unawaited(_loadAudioOutputName());
     }
@@ -577,7 +589,7 @@ class QqMusicController extends ChangeNotifier {
 
   Future<void> _prefetchCoverFlowSources() async {
     await _run(
-      () => api.loadFeature(QqMusicFeature.likedSongs),
+      () => api.loadFeature(QqMusicFeature.likedSongs, pageSize: 100),
       replaceResult: false,
       cacheFeature: QqMusicFeature.likedSongs,
       updateVisibleResult: false,
@@ -1173,6 +1185,9 @@ class QqMusicController extends ChangeNotifier {
   }) async {
     if (_sameSong(song, _currentSong)) {
       _clearPlaybackError();
+      if (_currentSongLikedStatus == null) {
+        _prepareCurrentSongLikedStatus(song);
+      }
       notifyListeners();
       return true;
     }
@@ -1207,9 +1222,7 @@ class QqMusicController extends ChangeNotifier {
       await _loadAudioSourceWithRetry(song, url);
       _audioSourceReady = true;
       _currentSong = song;
-      if (!preservePlaybackQueue) {
-        _currentSongFromLiked = _entry?.feature == QqMusicFeature.likedSongs;
-      }
+      _prepareCurrentSongLikedStatus(song);
       unawaited(_loadLyrics(song));
       unawaited(_loadAudioOutputName());
       if (!preservePlaybackQueue) {
@@ -1295,6 +1308,8 @@ class QqMusicController extends ChangeNotifier {
     _audioSourceReady = false;
     _lyrics = null;
     _currentSongFromLiked = false;
+    _currentSongLikedStatus = null;
+    _likedStatusRevision++;
     _position = Duration.zero;
     _duration = Duration.zero;
     _publishPlaybackProgress();
@@ -1729,7 +1744,12 @@ class QqMusicController extends ChangeNotifier {
           _setRootResult(previous);
         }
       }
-      _currentSongFromLiked = wasLiked;
+      _likedStatusCache[_songKey(song)] = wasLiked;
+      if (_sameSong(song, _currentSong)) {
+        _likedStatusRevision++;
+        _currentSongLikedStatus = wasLiked;
+        _currentSongFromLiked = wasLiked;
+      }
       _clearStatusMessage(scheduleDismiss: false);
       _error = _message(error);
     } finally {
@@ -1748,9 +1768,12 @@ class QqMusicController extends ChangeNotifier {
     _featureCache[QqMusicFeature.likedSongs] = QqMusicFeatureResult(
       title: previous?.title ?? '我喜欢的音乐',
       items: List.unmodifiable(updatedItems),
-      hasMore: previous?.hasMore ?? false,
+      hasMore: previous?.hasMore ?? true,
       message: previous?.message ?? '',
     );
+    _likedStatusRevision++;
+    _likedStatusCache[_songKey(song)] = liked;
+    _currentSongLikedStatus = liked;
     _currentSongFromLiked = liked;
     if (_entry?.feature == QqMusicFeature.likedSongs &&
         currentContainer == null) {
@@ -1758,16 +1781,70 @@ class QqMusicController extends ChangeNotifier {
     }
   }
 
-  Future<void> refreshCurrentSongLikedStatus() async {
-    if (!api.isLoggedIn || _currentSong == null) {
+  void _prepareCurrentSongLikedStatus(QqMusicItem song) {
+    final revision = ++_likedStatusRevision;
+    if (!api.isLoggedIn) {
+      _currentSongLikedStatus = false;
+      _currentSongFromLiked = false;
       return;
     }
-    await _run(
-      () => api.loadFeature(QqMusicFeature.likedSongs, forceRefresh: true),
-      replaceResult: false,
-      cacheFeature: QqMusicFeature.likedSongs,
-      updateVisibleResult: false,
-    );
+    final key = _songKey(song);
+    final cached = _likedStatusCache[key] ?? _likedStatusFromFeatureCache(song);
+    _currentSongLikedStatus = cached;
+    _currentSongFromLiked = cached == true;
+    if (cached == null) {
+      unawaited(_querySongLikedStatus(song, revision));
+    }
+  }
+
+  Future<void> refreshCurrentSongLikedStatus() async {
+    final song = _currentSong;
+    if (!api.isLoggedIn || song == null) {
+      return;
+    }
+    final revision = ++_likedStatusRevision;
+    await _querySongLikedStatus(song, revision);
+  }
+
+  Future<void> _querySongLikedStatus(QqMusicItem song, int revision) async {
+    const pageSize = 100;
+    const maxPages = 100;
+    try {
+      for (var page = 1; page <= maxPages; page++) {
+        final result = await api.loadFeature(
+          QqMusicFeature.likedSongs,
+          page: page,
+          pageSize: pageSize,
+          forceRefresh: page == 1,
+        );
+        if (revision != _likedStatusRevision ||
+            !_sameSong(song, _currentSong)) {
+          return;
+        }
+        if (result.items.any((item) => _sameSong(item, song))) {
+          _applyCurrentSongLikedStatus(song, revision, true);
+          return;
+        }
+        if (!result.hasMore) {
+          _applyCurrentSongLikedStatus(song, revision, false);
+          return;
+        }
+      }
+    } catch (_) {}
+  }
+
+  void _applyCurrentSongLikedStatus(
+    QqMusicItem song,
+    int revision,
+    bool liked,
+  ) {
+    if (revision != _likedStatusRevision || !_sameSong(song, _currentSong)) {
+      return;
+    }
+    _likedStatusCache[_songKey(song)] = liked;
+    _currentSongLikedStatus = liked;
+    _currentSongFromLiked = liked;
+    notifyListeners();
   }
 
   Future<void> _loadLyrics(QqMusicItem song) async {
@@ -1903,6 +1980,10 @@ class QqMusicController extends ChangeNotifier {
     _childrenPages.clear();
     _childrenCache.clear();
     _prefetchedPlayableUrls.clear();
+    _likedStatusCache.clear();
+    _likedStatusRevision++;
+    _currentSongLikedStatus = false;
+    _currentSongFromLiked = false;
     _unavailableSongKeys.clear();
     _profile = null;
     _qrCode = null;
@@ -2133,6 +2214,11 @@ class QqMusicController extends ChangeNotifier {
       if (status.done && api.isLoggedIn) {
         _stopQrPolling();
         await _loadProfile();
+        await _prefetchCoverFlowSources();
+        final song = _currentSong;
+        if (song != null) {
+          _prepareCurrentSongLikedStatus(song);
+        }
       } else if (status.event == 3 || status.event == 4 || status.event == -1) {
         _stopQrPolling();
       }
