@@ -730,19 +730,39 @@ class _ArtworkView extends StatelessWidget {
               borderRadius: BorderRadius.circular(24),
               boxShadow: const [
                 BoxShadow(
-                  color: Color(0x99000000),
-                  blurRadius: 42,
-                  offset: Offset(0, 18),
+                  color: Color(0x70000000),
+                  blurRadius: 20,
+                  spreadRadius: -6,
+                  offset: Offset(0, 12),
+                ),
+                BoxShadow(
+                  color: Color(0x3D000000),
+                  blurRadius: 34,
+                  spreadRadius: -14,
+                  offset: Offset(0, 24),
                 ),
               ],
             ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(24),
-              child: ArtworkImage(
-                imageUrl: album.imageUrl,
-                cacheWidth: 220,
-                cacheHeight: 220,
-              ),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(24),
+                  child: ArtworkImage(
+                    imageUrl: album.imageUrl,
+                    cacheWidth: 220,
+                    cacheHeight: 220,
+                  ),
+                ),
+                IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: const Color(0x24FFFFFF)),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         );
