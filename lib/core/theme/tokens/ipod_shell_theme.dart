@@ -69,21 +69,13 @@ class IpodShellTheme extends ThemeExtension<IpodShellTheme> {
 
 /// Screen-frame colors derived from [chassis] — related, never identical.
 ///
-/// Outer/inner rims stay lighter than the body; the solid bezel sits darker so
-/// the glass module still reads as a separate inset on any iPod finish.
+/// The solid bezel sits darker while the inner rim softly separates the glass.
 @immutable
 class ChassisFrameColors {
-  const ChassisFrameColors({
-    required this.bezel,
-    required this.outerRim,
-    required this.innerRim,
-  });
+  const ChassisFrameColors({required this.bezel, required this.innerRim});
 
-  /// Darker channel between the two highlight rings.
+  /// Darker bezel surrounding the glass.
   final Color bezel;
-
-  /// Bright outer module edge (slightly above chassis).
-  final Color outerRim;
 
   /// Softer inner glass edge.
   final Color innerRim;
@@ -111,14 +103,6 @@ class ChassisFrameColors {
         : (sat * 1.05).clamp(0.0, 1.0);
     final bezel = hsl.withLightness(bezelLight).withSaturation(bezelSat).toColor();
 
-    // Outer rim: soft highlight with a whisper of chassis hue.
-    final outerLight = (light + 0.38).clamp(0.68, 0.95);
-    final outerRim = hsl
-        .withLightness(outerLight)
-        .withSaturation((sat * 0.45).clamp(0.0, 0.55))
-        .toColor()
-        .withValues(alpha: 0.78);
-
     // Inner rim: quieter glass edge, still chassis-tinted.
     final innerLight = (light + 0.24).clamp(0.52, 0.88);
     final innerRim = hsl
@@ -127,10 +111,6 @@ class ChassisFrameColors {
         .toColor()
         .withValues(alpha: 0.62);
 
-    return ChassisFrameColors(
-      bezel: bezel,
-      outerRim: outerRim,
-      innerRim: innerRim,
-    );
+    return ChassisFrameColors(bezel: bezel, innerRim: innerRim);
   }
 }

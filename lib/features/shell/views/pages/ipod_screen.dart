@@ -126,17 +126,15 @@ class _IpodShellView extends StatelessWidget {
       fallback: theme.screenBottomRadius,
     );
     final outerRadius = BorderRadius.circular(r);
-    // Dual frame: thin highlight strokes + a wider bezel band between them
-    // (the gap is what reads as "thicker border", not the stroke width).
+    // Single dark bezel with a softer inner glass edge.
     final frame = ChassisFrameColors.fromChassis(shell.chassisColor);
-    const outerRimWidth = 1.0;
     const glassRimWidth = 1.0;
     final bezelPadding = chassisInsets.bezelPadding;
     // Corner radius follows side/bottom bezel only — never the tall top band
     // used to wrap a camera hole (that would collapse the glass clip).
     final glassRadius = _insetBorderRadius(
       outerRadius,
-      outerRimWidth + chassisInsets.bezelRadiusInset,
+      chassisInsets.bezelRadiusInset,
     );
     // Glass already cleared part of the cutout via the top bezel; residual
     // top padding prevents the status bar from double-reserving safeTop.
@@ -173,20 +171,16 @@ class _IpodShellView extends StatelessWidget {
               Expanded(
                 flex: 56,
                 child: Padding(
-                  // Inset on all sides so continuous corners + dual bezel sit on chassis.
+                  // Inset on all sides so continuous corners + bezel sit on chassis.
                   // Top scales down on notch/island (status bar already tall inside).
                   padding: chassisInsets.screenFramePadding,
                   child: DecoratedBox(
                     key: const ValueKey('ipod-screen-frame'),
                     decoration: ShapeDecoration(
-                      // Bezel fill darker than chassis; outer rim is a highlight.
+                      // Bezel fill stays darker than the chassis.
                       color: frame.bezel,
                       shape: RoundedSuperellipseBorder(
                         borderRadius: outerRadius,
-                        side: BorderSide(
-                          color: frame.outerRim,
-                          width: outerRimWidth,
-                        ),
                       ),
                     ),
                     child: Padding(

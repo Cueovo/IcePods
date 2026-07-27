@@ -44,15 +44,15 @@ class ChassisInsets {
   final double rawTop;
 
   /// Chassis band above the screen module. Moves the **entire** frame,
-  /// including the outer white rim.
+  /// including the outer frame edge.
   final double topOuter;
 
-  /// Extra padding outside the frame (between chassis and outer rim).
+  /// Extra padding outside the frame (between chassis and frame edge).
   final double screenFrameTop;
   final double screenFrameHorizontal;
   final double screenFrameBottom;
 
-  /// Solid bezel band between outer rim and glass (prefer uniform sides).
+  /// Solid bezel band between the frame edge and glass (prefer uniform sides).
   final double bezelTop;
   final double bezelHorizontal;
   final double bezelBottom;
@@ -74,7 +74,7 @@ class ChassisInsets {
         bezelBottom,
       );
 
-  /// Distance from physical top to the outer frame edge (white rim top).
+  /// Distance from physical top to the outer frame edge.
   double get frameTopFromScreen => topOuter + screenFrameTop;
 
   /// Distance from physical top to the start of glass content.
