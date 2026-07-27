@@ -2,10 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'package:qqmusic_ipod/business/repositories/music_repository.dart';
 import 'package:qqmusic_ipod/core/audio/audio_handler.dart';
 import 'package:qqmusic_ipod/core/audio/click_sound_service.dart';
+import 'package:qqmusic_ipod/core/storage/app_settings_store.dart';
 import 'package:qqmusic_ipod/core/storage/chassis_color_store.dart';
 import 'package:qqmusic_ipod/features/player/state/controller.dart';
 import 'package:qqmusic_ipod/features/shell/models/ipod_models.dart';
@@ -18,14 +20,16 @@ class ShellController extends ChangeNotifier {
     ClickSoundService? clickSound,
     PageController? pageController,
     ChassisColorStore? chassisColorStore,
+    AppSettingsStore? settingsStore,
   }) : music = QqMusicController(api: api, audioHandler: audioHandler),
        _clickSound = clickSound ?? ClickSoundService(),
        pageController = pageController ?? PageController(),
        _chassisColorStore = chassisColorStore ?? ChassisColorStore(),
+       _settingsStore = settingsStore ?? AppSettingsStore(),
        inactivePlaybackProgress = ValueNotifier(const QqMusicPlaybackProgress()) {
     music.addListener(_handleMusicStateChange);
     _lastControllerIsPlaying = music.isPlaying;
-    unawaited(music.initialize());
+    unawaited(_initialize());
     unawaited(_loadChassisColor());
   }
 
@@ -33,7 +37,9 @@ class ShellController extends ChangeNotifier {
   final ClickSoundService _clickSound;
   final PageController pageController;
   final ChassisColorStore _chassisColorStore;
+  final AppSettingsStore _settingsStore;
   final ValueNotifier<QqMusicPlaybackProgress> inactivePlaybackProgress;
+  final Map<AppSetting, String> _settingFeedback = {};
 
   PlayerMode mode = PlayerMode.menu;
   PlayerMode previousMode = PlayerMode.menu;
@@ -52,12 +58,38 @@ class ShellController extends ChangeNotifier {
   Album playingAlbum = coverFlowLibrary.first;
   bool _disposed = false;
   Color chassisColor = ChassisColorStore.defaultColor;
+  bool clickSoundEnabled = true;
+  bool hapticsEnabled = true;
+  PlaybackQuality playbackQuality = PlaybackQuality.standard;
+  AppVolumeLimit volumeLimit = AppVolumeLimit.off;
 
   MenuPage get currentMenuPage => qqMusicMenuPages[menuPath.last]!;
 
   int get menuIndex => menuIndices[currentMenuPage.section] ?? 0;
 
   MenuEntry get selectedMenuEntry => currentMenuPage.entries[menuIndex];
+
+  String? valueForMenuEntry(MenuEntry entry) {
+    if (entry.action == MenuAction.chassisColor &&
+        entry.chassisColorValue != null &&
+        chassisColor == Color(entry.chassisColorValue!)) {
+      return '当前';
+    }
+    return switch (entry.setting) {
+      AppSetting.clickSound => clickSoundEnabled ? '开启' : '关闭',
+      AppSetting.playbackQuality => playbackQuality.label,
+      AppSetting.volumeLimit => volumeLimit.label,
+      AppSetting.haptics => hapticsEnabled ? '开启' : '关闭',
+      AppSetting.clearCache => '按下清理',
+      AppSetting.about => 'v1.0.0',
+      null => null,
+    };
+  }
+
+  String descriptionForMenuEntry(MenuEntry entry) {
+    final setting = entry.setting;
+    return setting == null ? entry.description : _settingFeedback[setting] ?? entry.description;
+  }
 
   List<Album> get coverAlbums => music.coverFlowAlbums;
 
@@ -155,11 +187,31 @@ class ShellController extends ChangeNotifier {
   }
 
   void _tick() {
-    unawaited(_clickSound.playTick());
+    if (clickSoundEnabled) {
+      unawaited(_clickSound.playTick());
+    }
+  }
+
+  void _mediumImpact() {
+    if (hapticsEnabled) {
+      unawaited(HapticFeedback.mediumImpact());
+    }
+  }
+
+  void _lightImpact() {
+    if (hapticsEnabled) {
+      unawaited(HapticFeedback.lightImpact());
+    }
+  }
+
+  void _selectionClick() {
+    if (hapticsEnabled) {
+      unawaited(HapticFeedback.selectionClick());
+    }
   }
 
   void handleCenter() {
-    HapticFeedback.mediumImpact();
+    _mediumImpact();
     _tick();
     if (mode == PlayerMode.menu) {
       final entry = selectedMenuEntry;
@@ -200,6 +252,12 @@ class ShellController extends ChangeNotifier {
             return;
           }
           unawaited(setChassisColor(Color(value)));
+        case MenuAction.setting:
+          final setting = entry.setting;
+          if (setting == null) {
+            return;
+          }
+          unawaited(_activateSetting(setting));
       }
       return;
     }
@@ -250,7 +308,7 @@ class ShellController extends ChangeNotifier {
   }
 
   void handleMenu() {
-    HapticFeedback.lightImpact();
+    _lightImpact();
     _tick();
     if (mode == PlayerMode.feature && music.back()) {
       return;
@@ -321,7 +379,7 @@ class ShellController extends ChangeNotifier {
       if (next == menuIndex) {
         return false;
       }
-      HapticFeedback.selectionClick();
+      _selectionClick();
       _tick();
       menuIndices[currentMenuPage.section] = next;
       return true;
@@ -335,7 +393,7 @@ class ShellController extends ChangeNotifier {
       if (next == coverIndex) {
         return false;
       }
-      HapticFeedback.selectionClick();
+      _selectionClick();
       _tick();
       coverIndex = next;
       return true;
@@ -346,7 +404,7 @@ class ShellController extends ChangeNotifier {
       if (music.selectedIndex == previous) {
         return false;
       }
-      HapticFeedback.selectionClick();
+      _selectionClick();
       _tick();
       return true;
     }
@@ -371,7 +429,7 @@ class ShellController extends ChangeNotifier {
   }
 
   void stepSelection(int direction) {
-    HapticFeedback.selectionClick();
+    _selectionClick();
     _tick();
     if (mode == PlayerMode.menu) {
       final entries = currentMenuPage.entries;
@@ -411,7 +469,7 @@ class ShellController extends ChangeNotifier {
   }
 
   void togglePlayback() {
-    HapticFeedback.lightImpact();
+    _lightImpact();
     _tick();
     if (music.currentSong != null || mode == PlayerMode.feature) {
       unawaited(music.togglePlayback());
@@ -419,6 +477,117 @@ class ShellController extends ChangeNotifier {
     }
     isPlayingLocally = !isPlayingLocally;
     notifyListeners();
+  }
+
+  Future<void> _initialize() async {
+    await _loadSettings();
+    if (!_disposed) {
+      await music.initialize();
+    }
+  }
+
+  Future<void> _loadSettings() async {
+    try {
+      final settings = await _settingsStore.load();
+      if (_disposed) {
+        return;
+      }
+      clickSoundEnabled = settings.clickSoundEnabled;
+      hapticsEnabled = settings.hapticsEnabled;
+      playbackQuality = settings.playbackQuality;
+      volumeLimit = settings.volumeLimit;
+      music.setPlaybackFileType(playbackQuality.fileType);
+      try {
+        await music.setVolumeLimit(volumeLimit.gain);
+      } catch (_) {}
+      if (!_disposed) {
+        notifyListeners();
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _saveSettings() async {
+    try {
+      await _settingsStore.save(
+        AppSettingsSnapshot(
+          clickSoundEnabled: clickSoundEnabled,
+          hapticsEnabled: hapticsEnabled,
+          playbackQuality: playbackQuality,
+          volumeLimit: volumeLimit,
+        ),
+      );
+    } catch (_) {}
+  }
+
+  Future<void> _activateSetting(AppSetting setting) async {
+    switch (setting) {
+      case AppSetting.clickSound:
+        clickSoundEnabled = !clickSoundEnabled;
+        _settingFeedback[setting] = clickSoundEnabled
+            ? '点击音效已开启，滚轮与按键会播放机械反馈声。'
+            : '点击音效已关闭，滚轮与按键将保持安静。';
+        notifyListeners();
+        if (clickSoundEnabled) {
+          await _clickSound.playTick();
+        }
+        await _saveSettings();
+      case AppSetting.playbackQuality:
+        playbackQuality = playbackQuality.next;
+        music.setPlaybackFileType(playbackQuality.fileType);
+        _settingFeedback[setting] =
+            '已选择${playbackQuality.label}音质，将从下一首开始；不支持时回退标准。';
+        notifyListeners();
+        await _saveSettings();
+      case AppSetting.volumeLimit:
+        volumeLimit = volumeLimit.next;
+        _settingFeedback[setting] = volumeLimit == AppVolumeLimit.off
+            ? '播放器音量限制已关闭。'
+            : '播放器最大增益已限制为 ${volumeLimit.label}。';
+        notifyListeners();
+        try {
+          await music.setVolumeLimit(volumeLimit.gain);
+          await _saveSettings();
+        } catch (_) {
+          _settingFeedback[setting] = '应用音量限制失败，请稍后重试。';
+          notifyListeners();
+        }
+      case AppSetting.haptics:
+        hapticsEnabled = !hapticsEnabled;
+        _settingFeedback[setting] = hapticsEnabled
+            ? '触感反馈已开启。'
+            : '触感反馈已关闭。';
+        notifyListeners();
+        if (hapticsEnabled) {
+          await HapticFeedback.mediumImpact();
+        }
+        await _saveSettings();
+      case AppSetting.clearCache:
+        final imageCache = PaintingBinding.instance.imageCache;
+        final imageCount = imageCache.currentSize + imageCache.liveImageCount;
+        final dataCount = music.clearMemoryCaches();
+        imageCache
+          ..clear()
+          ..clearLiveImages();
+        final count = dataCount + imageCount;
+        _settingFeedback[setting] = count == 0
+            ? '缓存已经是空的。'
+            : '已清理 $count 项列表、歌词、播放地址和封面缓存。';
+        notifyListeners();
+      case AppSetting.about:
+        final uri = Uri.parse('https://github.com/Cueovo/IcePods');
+        try {
+          final opened = await launchUrl(
+            uri,
+            mode: LaunchMode.externalApplication,
+          );
+          _settingFeedback[setting] = opened
+              ? '已打开 IcePods 项目主页。'
+              : '无法打开项目主页。';
+        } catch (_) {
+          _settingFeedback[setting] = '无法打开项目主页。';
+        }
+        notifyListeners();
+    }
   }
 
   Future<void> _loadChassisColor() async {

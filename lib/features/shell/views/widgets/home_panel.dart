@@ -10,10 +10,18 @@ const double _menuTileGap = 5;
 const double _menuItemExtent = _menuTileHeight + _menuTileGap;
 
 class HomePanel extends StatefulWidget {
-  const HomePanel({required this.page, required this.selectedIndex, super.key});
+  const HomePanel({
+    required this.page,
+    required this.selectedIndex,
+    this.valueForEntry,
+    this.descriptionForEntry,
+    super.key,
+  });
 
   final MenuPage page;
   final int selectedIndex;
+  final String? Function(MenuEntry entry)? valueForEntry;
+  final String Function(MenuEntry entry)? descriptionForEntry;
 
   @override
   State<HomePanel> createState() => _HomePanelState();
@@ -77,6 +85,9 @@ class _HomePanelState extends State<HomePanel> {
   @override
   Widget build(BuildContext context) {
     final selected = widget.page.entries[widget.selectedIndex];
+    final selectedValue = widget.valueForEntry?.call(selected);
+    final selectedDescription =
+        widget.descriptionForEntry?.call(selected) ?? selected.description;
     // Content floats on ambient; no opaque sheet under the split.
     return Padding(
       // No fixed bottom reserve — list padding clears the glass curve instead.
@@ -106,6 +117,9 @@ class _HomePanelState extends State<HomePanel> {
                   return _MenuTile(
                     entry: widget.page.entries[index],
                     selected: widget.selectedIndex == index,
+                    value: widget.valueForEntry?.call(
+                      widget.page.entries[index],
+                    ),
                   );
                 },
               ),
@@ -130,7 +144,12 @@ class _HomePanelState extends State<HomePanel> {
                   ),
                 );
               },
-              child: _PreviewCard(key: ValueKey(selected.id), entry: selected),
+              child: _PreviewCard(
+                key: ValueKey(selected.id),
+                entry: selected,
+                value: selectedValue,
+                description: selectedDescription,
+              ),
             ),
           ),
         ],
@@ -140,10 +159,15 @@ class _HomePanelState extends State<HomePanel> {
 }
 
 class _MenuTile extends StatelessWidget {
-  const _MenuTile({required this.entry, required this.selected});
+  const _MenuTile({
+    required this.entry,
+    required this.selected,
+    required this.value,
+  });
 
   final MenuEntry entry;
   final bool selected;
+  final String? value;
 
   @override
   Widget build(BuildContext context) {
@@ -223,20 +247,34 @@ class _MenuTile extends StatelessWidget {
               ),
             ),
           ),
-          AnimatedOpacity(
-            duration: const Duration(milliseconds: 140),
-            opacity: selected ? 1 : .28,
-            child: Icon(
-              switch (entry.action) {
-                MenuAction.player => Icons.play_arrow_rounded,
-                MenuAction.info => Icons.tune_rounded,
-                MenuAction.chassisColor => Icons.check_rounded,
-                _ => Icons.chevron_right_rounded,
-              },
-              color: Colors.white,
-              size: 16,
+          if (value != null)
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 160),
+              child: Text(
+                value!,
+                key: ValueKey(value),
+                style: TextStyle(
+                  color: selected ? Colors.white : const Color(0x99FFFFFF),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            )
+          else
+            AnimatedOpacity(
+              duration: const Duration(milliseconds: 140),
+              opacity: selected ? 1 : .28,
+              child: Icon(
+                switch (entry.action) {
+                  MenuAction.player => Icons.play_arrow_rounded,
+                  MenuAction.info || MenuAction.setting => Icons.tune_rounded,
+                  MenuAction.chassisColor => Icons.circle_outlined,
+                  _ => Icons.chevron_right_rounded,
+                },
+                color: Colors.white,
+                size: 16,
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -244,9 +282,16 @@ class _MenuTile extends StatelessWidget {
 }
 
 class _PreviewCard extends StatelessWidget {
-  const _PreviewCard({required this.entry, super.key});
+  const _PreviewCard({
+    required this.entry,
+    required this.value,
+    required this.description,
+    super.key,
+  });
 
   final MenuEntry entry;
+  final String? value;
+  final String description;
 
   @override
   Widget build(BuildContext context) {
@@ -337,20 +382,57 @@ class _PreviewCard extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.end,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          entry.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            height: 1.2,
-                            fontWeight: FontWeight.w800,
-                          ),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                entry.title,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 18,
+                                  height: 1.2,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                            if (value != null) ...[
+                              const SizedBox(width: 8),
+                              AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 160),
+                                child: DecoratedBox(
+                                  key: ValueKey(value),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0x24FFFFFF),
+                                    borderRadius: BorderRadius.circular(99),
+                                    border: Border.all(
+                                      color: const Color(0x30FFFFFF),
+                                    ),
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    child: Text(
+                                      value!,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          entry.description,
+                          description,
                           maxLines: 4,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(

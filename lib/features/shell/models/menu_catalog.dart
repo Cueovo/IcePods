@@ -1,4 +1,5 @@
 import 'package:qqmusic_ipod/business/entities/music.dart';
+import 'package:qqmusic_ipod/core/storage/app_settings_store.dart';
 import 'package:qqmusic_ipod/features/shell/models/ipod_models.dart';
 
 const _dailyImage =
@@ -56,9 +57,10 @@ MenuEntry _feature(
   );
 }
 
-MenuEntry _info(
+MenuEntry _setting(
   String id,
   String label,
+  AppSetting setting,
   String imageUrl,
   String title,
   String description,
@@ -66,7 +68,8 @@ MenuEntry _info(
   return MenuEntry(
     id: id,
     label: label,
-    action: MenuAction.info,
+    action: MenuAction.setting,
+    setting: setting,
     imageUrl: imageUrl,
     title: title,
     description: description,
@@ -348,61 +351,53 @@ final qqMusicMenuPages = <MenuSection, MenuPage>{
         '机身颜色',
         '经典 iPod 铝壳配色，调整屏幕与滚轮以外的机身底色。',
       ),
-      _info(
+      _setting(
         'click_sound',
         '点击音效',
+        AppSetting.clickSound,
         _settingsImage,
         'Click Wheel 音效',
-        '在转动滚轮与按下按钮时播放经典机械反馈声。',
+        '开启或关闭滚轮与按键的机械点击声，选择后立即生效。',
       ),
-      _info(
-        'equalizer',
-        '均衡器',
-        _coverImage,
-        'EQ 均衡器',
-        '按场景微调高频、低频与人声，塑造专属听感。',
-      ),
-      _info(
+      _setting(
         'audio_quality',
         '音质',
+        AppSetting.playbackQuality,
         _hallImage,
         '播放音质',
-        '在流畅、标准、高品与无损之间切换，兼顾流量与听感。',
+        '切换标准、高品与无损音源；新音质从下一首开始，不支持时自动回退标准。',
       ),
-      _info(
-        'spatial_audio',
-        '空间音频',
-        _dailyImage,
-        '空间音频',
-        '开启更有包围感的声场，让耳机中的舞台更立体。',
-      ),
-      _info(
+      _setting(
         'volume_limit',
         '音量限制',
+        AppSetting.volumeLimit,
         _playlistImage,
-        '音量上限',
-        '为长时间聆听设定安全上限，保护听力。',
+        '播放器音量上限',
+        '限制应用内播放器的最大增益，选择后立即作用于当前播放。',
       ),
-      _info(
+      _setting(
         'haptics',
         '触感反馈',
+        AppSetting.haptics,
         _libraryImage,
         '触感反馈',
-        '为滚轮与中心键提供轻微震动反馈。',
+        '开启或关闭滚轮、中心键和功能按键的系统震动反馈。',
       ),
-      _info(
+      _setting(
         'cache',
-        '缓存管理',
+        '清理缓存',
+        AppSetting.clearCache,
         _coverImage,
-        '缓存清理',
-        '查看封面与音频缓存占用，一键释放空间。',
+        '清理内存缓存',
+        '释放列表数据、歌词、临时播放地址与封面图片的内存缓存。',
       ),
-      _info(
+      _setting(
         'about',
         '关于',
+        AppSetting.about,
         _settingsImage,
-        '关于本机',
-        '查看版本信息、致谢与开源组件说明。',
+        'IcePods 1.0.0',
+        '查看并打开 IcePods 开源项目主页。当前构建版本 1.0.0+1。',
       ),
     ],
   ),

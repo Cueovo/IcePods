@@ -263,6 +263,10 @@ class _IpodShellView extends StatelessWidget {
                                             page: shell.currentMenuPage,
                                             selectedIndex: shell.menuIndex,
                                             menuDepth: shell.menuPath.length,
+                                            valueForEntry:
+                                                shell.valueForMenuEntry,
+                                            descriptionForEntry:
+                                                shell.descriptionForMenuEntry,
                                           ),
                                           CoverFlowPanel(
                                             selectedIndex: shell.coverIndex,
@@ -344,11 +348,15 @@ class _MenuPageTransition extends StatefulWidget {
     required this.page,
     required this.selectedIndex,
     required this.menuDepth,
+    required this.valueForEntry,
+    required this.descriptionForEntry,
   });
 
   final MenuPage page;
   final int selectedIndex;
   final int menuDepth;
+  final String? Function(MenuEntry entry) valueForEntry;
+  final String Function(MenuEntry entry) descriptionForEntry;
 
   @override
   State<_MenuPageTransition> createState() => _MenuPageTransitionState();
@@ -428,6 +436,8 @@ class _MenuPageTransitionState extends State<_MenuPageTransition> {
           child: HomePanel(
             page: widget.page,
             selectedIndex: widget.selectedIndex,
+            valueForEntry: widget.valueForEntry,
+            descriptionForEntry: widget.descriptionForEntry,
           ),
         ),
       ),

@@ -230,6 +230,8 @@ class QqMusicController extends ChangeNotifier {
   Uri? _lastExternalUri;
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
+  int _playbackFileType = 13;
+  double _volumeLimit = 1;
 
   bool get isLoading => _isLoading;
   bool get isPlaying => _isPlaying;
@@ -270,6 +272,44 @@ class QqMusicController extends ChangeNotifier {
   Duration get position => _position;
   Duration get duration => _duration;
   double get progress => playbackProgress.value.value;
+  int get playbackFileType => _playbackFileType;
+  double get volumeLimit => _volumeLimit;
+
+  void setPlaybackFileType(int fileType) {
+    if (_playbackFileType == fileType) {
+      return;
+    }
+    _playbackFileType = fileType;
+    _prefetchedPlayableUrls.clear();
+  }
+
+  Future<void> setVolumeLimit(double gain) async {
+    final next = gain.clamp(0.0, 1.0);
+    if (_volumeLimit == next) {
+      return;
+    }
+    _volumeLimit = next;
+    await _audioPlayer.setVolume(next);
+  }
+
+  int clearMemoryCaches() {
+    final count =
+        _featureCache.length +
+        _childrenCache.length +
+        _prefetchedPlayableUrls.length +
+        _lyricsCache.length +
+        _unavailableSongKeys.length;
+    _featureCache.clear();
+    _featurePages.clear();
+    _childrenCache.clear();
+    _childrenPages.clear();
+    _prefetchedPlayableUrls.clear();
+    _lyricsCache.clear();
+    _unavailableSongKeys.clear();
+    _coverFlowCacheReady = false;
+    notifyListeners();
+    return count;
+  }
 
   void _publishPlaybackProgress() {
     final previous = playbackProgress.value;
@@ -445,7 +485,7 @@ class QqMusicController extends ChangeNotifier {
     final restoredPosition = _position;
     try {
       await _audioSessionConfigurator();
-      final url = await api.getPlayableUrl(song);
+      final url = await _getPlayableUrl(song);
       await _loadAudioSourceWithRetry(song, url);
       if (!_sameSong(song, _currentSong)) {
         return false;
@@ -1157,7 +1197,7 @@ class QqMusicController extends ChangeNotifier {
       if (prefetchedUrl == null && isUnavailable(song)) {
         throw QqMusicApiException(_unavailableSongMessage(song), code: 104003);
       }
-      final url = prefetchedUrl ?? await api.getPlayableUrl(song);
+      final url = prefetchedUrl ?? await _getPlayableUrl(song);
       _unavailableSongKeys.remove(_songKey(song));
       await _audioSessionConfigurator();
       _audioSourceReady = false;
@@ -1394,7 +1434,7 @@ class QqMusicController extends ChangeNotifier {
         if (!_isSourcePlaybackError(error)) {
           rethrow;
         }
-        final refreshedUrl = await api.getPlayableUrl(song);
+        final refreshedUrl = await _getPlayableUrl(song);
         _unavailableSongKeys.remove(_songKey(song));
         await _audioSourceLoader(song, refreshedUrl);
       }
@@ -1440,7 +1480,7 @@ class QqMusicController extends ChangeNotifier {
     _prefetchedPlayableUrls.remove(_songKey(song));
     notifyListeners();
     try {
-      final refreshedUrl = await api.getPlayableUrl(song);
+      final refreshedUrl = await _getPlayableUrl(song);
       if (!_sameSong(song, _currentSong)) {
         return;
       }
@@ -1494,9 +1534,20 @@ class QqMusicController extends ChangeNotifier {
 
   Future<void> _seekTo(Duration position) => _audioSeeker(position);
 
+  Future<Uri> _getPlayableUrl(QqMusicItem song) async {
+    try {
+      return await api.getPlayableUrl(song, fileType: _playbackFileType);
+    } catch (_) {
+      if (_playbackFileType == 13) {
+        rethrow;
+      }
+      return api.getPlayableUrl(song);
+    }
+  }
+
   Future<Uri?> _tryGetPlayableUrl(QqMusicItem song) async {
     try {
-      final url = await api.getPlayableUrl(song);
+      final url = await _getPlayableUrl(song);
       _unavailableSongKeys.remove(_songKey(song));
       return url;
     } catch (_) {

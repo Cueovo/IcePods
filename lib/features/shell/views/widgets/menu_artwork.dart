@@ -50,6 +50,7 @@ class MenuArtwork extends StatelessWidget {
           MenuAction.feature => Icons.music_note_rounded,
           MenuAction.info => Icons.tune_rounded,
           MenuAction.chassisColor => Icons.circle_rounded,
+          MenuAction.setting => Icons.tune_rounded,
         },
       },
     };

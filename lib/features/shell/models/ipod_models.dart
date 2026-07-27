@@ -1,8 +1,17 @@
 import 'package:qqmusic_ipod/business/entities/music.dart';
+import 'package:qqmusic_ipod/core/storage/app_settings_store.dart';
 
 enum PlayerMode { menu, coverFlow, player, feature }
 
-enum MenuAction { submenu, feature, coverFlow, player, info, chassisColor }
+enum MenuAction {
+  submenu,
+  feature,
+  coverFlow,
+  player,
+  info,
+  chassisColor,
+  setting,
+}
 
 enum MenuSection {
   root,
@@ -26,6 +35,7 @@ class MenuEntry {
     this.apiOperation,
     this.capabilities = const [],
     this.chassisColorValue,
+    this.setting,
   });
 
   final String id;
@@ -40,6 +50,7 @@ class MenuEntry {
   final List<String> capabilities;
   /// ARGB color used by [MenuAction.chassisColor] entries.
   final int? chassisColorValue;
+  final AppSetting? setting;
 }
 
 class MenuPage {
