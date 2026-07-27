@@ -728,20 +728,6 @@ class _ArtworkView extends StatelessWidget {
             transformAlignment: Alignment.center,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(24),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x70000000),
-                  blurRadius: 20,
-                  spreadRadius: -6,
-                  offset: Offset(0, 12),
-                ),
-                BoxShadow(
-                  color: Color(0x3D000000),
-                  blurRadius: 34,
-                  spreadRadius: -14,
-                  offset: Offset(0, 24),
-                ),
-              ],
             ),
             child: Stack(
               fit: StackFit.expand,
