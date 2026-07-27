@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import 'package:qqmusic_ipod/business/repositories/music_repository.dart';
 import 'package:qqmusic_ipod/core/audio/audio_handler.dart';
+import 'package:qqmusic_ipod/core/theme/tokens/app_tokens.dart';
 import 'package:qqmusic_ipod/core/theme/tokens/ipod_shell_theme.dart';
 import 'package:qqmusic_ipod/core/theme/widgets/click_wheel.dart';
 import 'package:qqmusic_ipod/features/player/state/controller.dart';
@@ -363,41 +364,69 @@ class _MenuPageTransitionState extends State<_MenuPageTransition> {
 
   @override
   Widget build(BuildContext context) {
-    final enteringOffset = _isForward
-        ? const Offset(.14, 0)
-        : const Offset(-.14, 0);
-    final exitingOffset = _isForward
-        ? const Offset(-.06, 0)
-        : const Offset(.06, 0);
+    final reduceMotion = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final enteringOffset = reduceMotion
+        ? Offset.zero
+        : _isForward
+        ? const Offset(.065, 0)
+        : const Offset(-.065, 0);
+    final exitingOffset = reduceMotion
+        ? Offset.zero
+        : _isForward
+        ? const Offset(-.025, 0)
+        : const Offset(.025, 0);
     final currentKey = ValueKey(widget.page.section);
 
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 280),
-      switchInCurve: Curves.easeOutCubic,
-      switchOutCurve: Curves.easeInCubic,
-      layoutBuilder: (currentChild, previousChildren) {
-        return Stack(
-          fit: StackFit.expand,
-          children: [...previousChildren, ?currentChild],
-        );
-      },
-      transitionBuilder: (child, animation) {
-        final isIncoming = child.key == currentKey;
-        final offset = isIncoming ? enteringOffset : exitingOffset;
-        return FadeTransition(
-          opacity: animation,
-          child: SlideTransition(
-            position: Tween<Offset>(begin: offset, end: Offset.zero).animate(
-              animation,
+    return ClipRect(
+      child: AnimatedSwitcher(
+        duration: reduceMotion
+            ? AppDurations.reducedMotion
+            : AppDurations.menuPage,
+        layoutBuilder: (currentChild, previousChildren) {
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              if (previousChildren.isNotEmpty) previousChildren.last,
+              ?currentChild,
+            ],
+          );
+        },
+        transitionBuilder: (child, animation) {
+          final isIncoming = child.key == currentKey;
+          final progress = isIncoming
+              ? animation
+              : ReverseAnimation(animation);
+          final position = Tween<Offset>(
+            begin: isIncoming ? enteringOffset : Offset.zero,
+            end: isIncoming ? Offset.zero : exitingOffset,
+          ).animate(
+            CurvedAnimation(parent: progress, curve: AppCurves.menuPage),
+          );
+          final opacity = Tween<double>(
+            begin: isIncoming ? 0 : 1,
+            end: isIncoming ? 1 : 0,
+          ).animate(
+            CurvedAnimation(
+              parent: progress,
+              curve: Interval(
+                isIncoming ? .08 : 0,
+                isIncoming ? .72 : .38,
+                curve: AppCurves.strongEaseOut,
+              ),
             ),
-            child: child,
+          );
+          return FadeTransition(
+            opacity: opacity,
+            child: SlideTransition(position: position, child: child),
+          );
+        },
+        child: RepaintBoundary(
+          key: currentKey,
+          child: HomePanel(
+            page: widget.page,
+            selectedIndex: widget.selectedIndex,
           ),
-        );
-      },
-      child: HomePanel(
-        key: currentKey,
-        page: widget.page,
-        selectedIndex: widget.selectedIndex,
+        ),
       ),
     );
   }

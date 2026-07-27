@@ -26,6 +26,8 @@ abstract final class AppRadii {
 
 abstract final class AppDurations {
   static const quick = Duration(milliseconds: 180);
+  static const menuPage = Duration(milliseconds: 240);
+  static const reducedMotion = Duration(milliseconds: 200);
   static const standard = Duration(milliseconds: 300);
   static const emphasized = Duration(milliseconds: 420);
   static const lyricLine = Duration(milliseconds: 480);
@@ -34,6 +36,8 @@ abstract final class AppDurations {
 
 abstract final class AppCurves {
   static const standard = Curves.easeOutCubic;
+  static const strongEaseOut = Cubic(0.23, 1, 0.32, 1);
+  static const menuPage = Cubic(0.32, 0.72, 0, 1);
   static const lyricLine = Curves.easeOutQuart;
   static const lyricScroll = Curves.easeInOutCubic;
 }
