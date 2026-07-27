@@ -273,6 +273,9 @@ class _IpodShellView extends StatelessWidget {
                                             FeaturePanel(
                                               entry: shell.activeFeature!,
                                               controller: shell.music,
+                                              isActive:
+                                                  shell.mode ==
+                                                  PlayerMode.feature,
                                             )
                                           else
                                             const SizedBox.shrink(),

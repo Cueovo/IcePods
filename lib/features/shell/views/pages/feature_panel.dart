@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:qqmusic_ipod/business/entities/music.dart';
+import 'package:qqmusic_ipod/core/theme/tokens/app_tokens.dart';
 import 'package:qqmusic_ipod/core/theme/widgets/ipod_scrollbar.dart';
 import 'package:qqmusic_ipod/features/player/state/controller.dart';
 import 'package:qqmusic_ipod/features/shell/models/ipod_models.dart';
@@ -18,27 +19,68 @@ class FeaturePanel extends StatefulWidget {
   const FeaturePanel({
     required this.entry,
     required this.controller,
+    required this.isActive,
     super.key,
   });
 
   final MenuEntry entry;
   final QqMusicController controller;
+  final bool isActive;
 
   @override
   State<FeaturePanel> createState() => _FeaturePanelState();
 }
 
-class _FeaturePanelState extends State<FeaturePanel> {
+class _FeaturePanelState extends State<FeaturePanel>
+    with SingleTickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _listController = ScrollController();
+  late final AnimationController _entranceController;
+  late final Animation<double> _headerOpacity;
+  late final Animation<Offset> _headerPosition;
+  late final Animation<double> _bodyOpacity;
+  late final Animation<Offset> _bodyPosition;
   late int _lastSelectedIndex;
   bool _selectionRevealScheduled = false;
 
   @override
   void initState() {
     super.initState();
+    _entranceController = AnimationController(
+      vsync: this,
+      duration: AppDurations.standard,
+    );
+    _headerOpacity = CurvedAnimation(
+      parent: _entranceController,
+      curve: const Interval(0, .68, curve: AppCurves.strongEaseOut),
+    );
+    _headerPosition = Tween<Offset>(
+      begin: const Offset(.035, 0),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(
+        parent: _entranceController,
+        curve: const Interval(0, .78, curve: AppCurves.menuPage),
+      ),
+    );
+    _bodyOpacity = CurvedAnimation(
+      parent: _entranceController,
+      curve: const Interval(.12, 1, curve: AppCurves.strongEaseOut),
+    );
+    _bodyPosition = Tween<Offset>(
+      begin: const Offset(.07, 0),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(
+        parent: _entranceController,
+        curve: const Interval(.08, 1, curve: AppCurves.menuPage),
+      ),
+    );
     _lastSelectedIndex = widget.controller.selectedIndex;
     widget.controller.addListener(_handleChange);
+    if (widget.isActive) {
+      _entranceController.forward();
+    }
   }
 
   @override
@@ -48,12 +90,17 @@ class _FeaturePanelState extends State<FeaturePanel> {
       oldWidget.controller.removeListener(_handleChange);
       widget.controller.addListener(_handleChange);
     }
+    if (widget.isActive &&
+        (!oldWidget.isActive || oldWidget.entry.id != widget.entry.id)) {
+      _entranceController.forward(from: 0);
+    }
     _lastSelectedIndex = widget.controller.selectedIndex;
   }
 
   @override
   void dispose() {
     widget.controller.removeListener(_handleChange);
+    _entranceController.dispose();
     _searchController.dispose();
     _listController.dispose();
     super.dispose();
@@ -108,9 +155,31 @@ class _FeaturePanelState extends State<FeaturePanel> {
 
   @override
   Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+
+    Widget entrance({
+      required Widget child,
+      required Animation<double> opacity,
+      required Animation<Offset> position,
+    }) {
+      final content = RepaintBoundary(child: child);
+      return FadeTransition(
+        opacity: opacity,
+        child: reduceMotion
+            ? content
+            : SlideTransition(position: position, child: content),
+      );
+    }
+
     final feature = widget.entry.feature;
     if (feature == QqMusicFeature.account) {
-      return AccountView(controller: widget.controller);
+      return ClipRect(
+        child: entrance(
+          opacity: _bodyOpacity,
+          position: _bodyPosition,
+          child: AccountView(controller: widget.controller),
+        ),
+      );
     }
     // Match HomePanel top inset (0) so feature pages sit under the status
     // bar the same distance as the menu — not an extra 12pt lower.
@@ -118,70 +187,86 @@ class _FeaturePanelState extends State<FeaturePanel> {
     // Status / error float over the list so they never permanently shrink it.
     final hasPlaybackError = widget.controller.playbackError.isNotEmpty;
     final hasStatus = widget.controller.statusMessage.isNotEmpty;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          FeatureHeader(
-            entry: widget.entry,
-            title: widget.controller.result?.title ?? widget.entry.title,
-            isLoading: widget.controller.isLoading,
-            cacheLabel: _cacheLabel(widget.controller.result),
-            onRefresh: widget.controller.refresh,
-          ),
-          if (feature == QqMusicFeature.search) ...[
-            const SizedBox(height: 10),
-            FeatureSearchBar(
-              controller: _searchController,
-              onSearch: widget.controller.search,
-            ),
-          ],
-          if (widget.controller.isCreatedPlaylistsRoot ||
-              widget.controller.isInsideCreatedPlaylist) ...[
-            const SizedBox(height: 8),
-            PlaylistActions(
-              controller: widget.controller,
-              onCreate: _promptCreatePlaylist,
-            ),
-          ],
-          const SizedBox(height: 10),
-          Expanded(
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Positioned.fill(child: _buildBody()),
-                if (hasPlaybackError || hasStatus)
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: 6,
-                    child: IgnorePointer(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (hasPlaybackError)
-                            _FloatingStatusChip(
-                              key: const ValueKey('playback-error'),
-                              text: widget.controller.playbackError,
-                              color: const Color(0xFFFFA8A8),
-                            ),
-                          if (hasPlaybackError && hasStatus)
-                            const SizedBox(height: 4),
-                          if (hasStatus)
-                            _FloatingStatusChip(
-                              key: const ValueKey('api-action-status'),
-                              text: widget.controller.statusMessage,
-                              color: const Color(0xFF8DE5B9),
-                            ),
-                        ],
-                      ),
-                    ),
+    return ClipRect(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            entrance(
+              opacity: _headerOpacity,
+              position: _headerPosition,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  FeatureHeader(
+                    entry: widget.entry,
+                    title:
+                        widget.controller.result?.title ?? widget.entry.title,
+                    isLoading: widget.controller.isLoading,
+                    cacheLabel: _cacheLabel(widget.controller.result),
+                    onRefresh: widget.controller.refresh,
                   ),
-              ],
+                  if (feature == QqMusicFeature.search) ...[
+                    const SizedBox(height: 10),
+                    FeatureSearchBar(
+                      controller: _searchController,
+                      onSearch: widget.controller.search,
+                    ),
+                  ],
+                  if (widget.controller.isCreatedPlaylistsRoot ||
+                      widget.controller.isInsideCreatedPlaylist) ...[
+                    const SizedBox(height: 8),
+                    PlaylistActions(
+                      controller: widget.controller,
+                      onCreate: _promptCreatePlaylist,
+                    ),
+                  ],
+                ],
+              ),
             ),
-          ),
-        ],
+            const SizedBox(height: 10),
+            Expanded(
+              child: entrance(
+                opacity: _bodyOpacity,
+                position: _bodyPosition,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Positioned.fill(child: _buildBody()),
+                    if (hasPlaybackError || hasStatus)
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 6,
+                        child: IgnorePointer(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (hasPlaybackError)
+                                _FloatingStatusChip(
+                                  key: const ValueKey('playback-error'),
+                                  text: widget.controller.playbackError,
+                                  color: const Color(0xFFFFA8A8),
+                                ),
+                              if (hasPlaybackError && hasStatus)
+                                const SizedBox(height: 4),
+                              if (hasStatus)
+                                _FloatingStatusChip(
+                                  key: const ValueKey('api-action-status'),
+                                  text: widget.controller.statusMessage,
+                                  color: const Color(0xFF8DE5B9),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
