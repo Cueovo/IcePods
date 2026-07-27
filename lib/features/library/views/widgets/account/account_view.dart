@@ -31,7 +31,9 @@ class AccountView extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            controller.isLoggedIn ? '已登录 QQ 音乐' : '扫码登录以同步收藏与歌单',
+            controller.isLoggedIn
+                ? '资料与云端音乐已同步'
+                : '扫码登录以同步收藏与歌单',
             style: const TextStyle(
               color: Color(0x80FFFFFF),
               fontSize: 12,
@@ -56,7 +58,12 @@ class AccountView extends StatelessWidget {
     }
     final profile = controller.profile;
     if (controller.isLoggedIn && profile != null) {
-      return ProfileCard(profile: profile, onLogout: controller.logout);
+      return ProfileCard(
+        profile: profile,
+        isRefreshing: controller.isLoading,
+        onRefresh: controller.refresh,
+        onLogout: controller.logout,
+      );
     }
     final qrCode = controller.qrCode;
     if (controller.isLoading || qrCode == null) {
