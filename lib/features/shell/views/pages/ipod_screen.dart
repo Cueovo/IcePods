@@ -91,13 +91,18 @@ class _IpodScreenState extends State<IpodScreen> with WidgetsBindingObserver {
     return AnimatedBuilder(
       animation: _shell,
       builder: (context, child) {
+        final backdrop = ChassisBackdropColors.fromChassis(_shell.chassisColor);
         return Scaffold(
           // Body / chassis color fills everything outside screen + wheel.
-          backgroundColor: _shell.chassisColor,
+          backgroundColor: backdrop,
           extendBody: true,
           extendBodyBehindAppBar: true,
           body: SizedBox.expand(
-            child: _IpodShellView(shell: _shell, theme: theme),
+            child: _IpodShellView(
+              shell: _shell,
+              theme: theme,
+              backdrop: backdrop,
+            ),
           ),
         );
       },
@@ -106,10 +111,15 @@ class _IpodScreenState extends State<IpodScreen> with WidgetsBindingObserver {
 }
 
 class _IpodShellView extends StatelessWidget {
-  const _IpodShellView({required this.shell, required this.theme});
+  const _IpodShellView({
+    required this.shell,
+    required this.theme,
+    required this.backdrop,
+  });
 
   final ShellController shell;
   final IpodShellTheme theme;
+  final Color backdrop;
 
   @override
   Widget build(BuildContext context) {
@@ -143,21 +153,25 @@ class _IpodShellView extends StatelessWidget {
       padding: media.padding.copyWith(top: residualTop),
       viewPadding: media.viewPadding.copyWith(top: residualTop),
     );
+    final backdropBrightness = ThemeData.estimateBrightnessForColor(backdrop);
+    final systemIconBrightness = backdropBrightness == Brightness.light
+        ? Brightness.dark
+        : Brightness.light;
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: const SystemUiOverlayStyle(
+      value: SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.light,
-        statusBarBrightness: Brightness.dark,
+        statusBarIconBrightness: systemIconBrightness,
+        statusBarBrightness: backdropBrightness,
         systemStatusBarContrastEnforced: false,
         systemNavigationBarColor: Colors.transparent,
-        systemNavigationBarIconBrightness: Brightness.light,
+        systemNavigationBarIconBrightness: systemIconBrightness,
         systemNavigationBarDividerColor: Colors.transparent,
         systemNavigationBarContrastEnforced: false,
       ),
       // Chassis fills the device; ambient lives only inside the screen.
       child: ColoredBox(
         key: const ValueKey('fullscreen-player'),
-        color: shell.chassisColor,
+        color: backdrop,
         child: Padding(
           // Bottom keeps home-indicator safe area; top is cutout-aware.
           padding: EdgeInsets.only(

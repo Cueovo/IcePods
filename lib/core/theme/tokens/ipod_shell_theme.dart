@@ -67,6 +67,34 @@ class IpodShellTheme extends ThemeExtension<IpodShellTheme> {
   }
 }
 
+abstract final class ChassisBackdropColors {
+  static Color fromChassis(Color chassis) {
+    return switch (chassis.toARGB32()) {
+      0xFF1A1A1A => const Color(0xFFFFFFFF),
+      0xFFC8C8C8 => const Color(0xFF24272D),
+      0xFF7EB8D4 => const Color(0xFFF5E3D6),
+      0xFF8FBF8F => const Color(0xFFF0E5F5),
+      0xFFE8A0B8 => const Color(0xFFE1F1EA),
+      0xFFD4B896 => const Color(0xFF243447),
+      0xFFC41E3A => const Color(0xFFE3F0F5),
+      _ => _derived(chassis),
+    };
+  }
+
+  static Color _derived(Color chassis) {
+    final hsl = HSLColor.fromColor(chassis);
+    if (hsl.lightness < 0.24) {
+      return const Color(0xFFFFFFFF);
+    }
+    final lightness = hsl.lightness > 0.62 ? 0.16 : 0.92;
+    return hsl
+        .withHue((hsl.hue + 180) % 360)
+        .withSaturation((hsl.saturation * 0.28).clamp(0.04, 0.18))
+        .withLightness(lightness)
+        .toColor();
+  }
+}
+
 /// Screen-frame colors derived from [chassis] — related, never identical.
 ///
 /// The solid bezel sits darker while the inner rim softly separates the glass.
