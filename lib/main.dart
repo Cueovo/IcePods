@@ -12,6 +12,7 @@ import 'package:qqmusic_ipod/core/theme/tokens/ipod_shell_theme.dart';
 import 'package:qqmusic_ipod/core/utils/device_display_metrics.dart';
 import 'package:qqmusic_ipod/data/repositories_impl/official_api.dart';
 import 'package:qqmusic_ipod/features/shell/views/pages/ipod_screen.dart';
+import 'package:qqmusic_ipod/features/splash/views/vector_field_splash.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -171,7 +172,9 @@ class MyApp extends StatelessWidget {
       ),
       home: audioHandler == null
           ? _AudioInitFailureScreen(error: audioInitError)
-          : IpodScreen(api: api, audioHandler: audioHandler),
+          : OpeningSequence(
+              child: IpodScreen(api: api, audioHandler: audioHandler),
+            ),
     );
   }
 }
