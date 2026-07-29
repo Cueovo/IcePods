@@ -12,7 +12,7 @@ import 'package:qqmusic_ipod/core/theme/tokens/ipod_shell_theme.dart';
 import 'package:qqmusic_ipod/core/utils/device_display_metrics.dart';
 import 'package:qqmusic_ipod/data/repositories_impl/official_api.dart';
 import 'package:qqmusic_ipod/features/shell/views/pages/ipod_screen.dart';
-import 'package:qqmusic_ipod/features/splash/views/vector_field_splash.dart';
+import 'package:qqmusic_ipod/features/splash/views/jitter_splash.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -166,9 +166,7 @@ class MyApp extends StatelessWidget {
           mainAxisMargin: 6,
           minThumbLength: 16,
         ),
-        extensions: const <ThemeExtension<dynamic>>[
-          IpodShellTheme.classic,
-        ],
+        extensions: const <ThemeExtension<dynamic>>[IpodShellTheme.classic],
       ),
       home: audioHandler == null
           ? _AudioInitFailureScreen(error: audioInitError)

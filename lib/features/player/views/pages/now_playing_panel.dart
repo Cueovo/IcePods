@@ -1,4 +1,4 @@
-﻿import 'dart:math' as math;
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -26,9 +26,11 @@ class NowPlayingPanel extends StatefulWidget {
     this.audioOutputName = '',
     this.isLiked = false,
     this.playbackMode = QqMusicPlaybackMode.sequential,
+    this.queueLength = 0,
     this.onLikedPressed,
     this.onLyricsPressed,
     this.onPlaybackModePressed,
+    this.onQueuePressed,
     super.key,
   });
 
@@ -47,9 +49,11 @@ class NowPlayingPanel extends StatefulWidget {
   final String audioOutputName;
   final bool isLiked;
   final QqMusicPlaybackMode playbackMode;
+  final int queueLength;
   final VoidCallback? onLikedPressed;
   final VoidCallback? onLyricsPressed;
   final VoidCallback? onPlaybackModePressed;
+  final VoidCallback? onQueuePressed;
 
   @override
   State<NowPlayingPanel> createState() => _NowPlayingPanelState();
@@ -76,7 +80,8 @@ class _NowPlayingPanelState extends State<NowPlayingPanel> {
     }
     final currentTime = _formatDuration(widget.position);
     final totalTime = _formatDuration(widget.duration);
-    final reduceMotion = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final reduceMotion =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
     return GestureDetector(
       key: const ValueKey('now-playing-swipe-area'),
       behavior: HitTestBehavior.opaque,
@@ -148,9 +153,7 @@ class _NowPlayingPanelState extends State<NowPlayingPanel> {
                       },
                       transitionBuilder: (child, animation) {
                         final currentKey = ValueKey(
-                          _showLyrics
-                              ? 'player-lyrics'
-                              : 'player-artwork-view',
+                          _showLyrics ? 'player-lyrics' : 'player-artwork-view',
                         );
                         final isIncoming = child.key == currentKey;
                         final progress = isIncoming
@@ -159,49 +162,52 @@ class _NowPlayingPanelState extends State<NowPlayingPanel> {
                         final direction = reduceMotion
                             ? 0.0
                             : _contentDirection.toDouble();
-                        final position = Tween<Offset>(
-                          begin: isIncoming
-                              ? Offset(.065 * direction, 0)
-                              : Offset.zero,
-                          end: isIncoming
-                              ? Offset.zero
-                              : Offset(-.032 * direction, 0),
-                        ).animate(
-                          CurvedAnimation(
-                            parent: progress,
-                            curve: AppCurves.menuPage,
-                          ),
-                        );
-                        final opacity = Tween<double>(
-                          begin: isIncoming ? 0 : 1,
-                          end: isIncoming ? 1 : 0,
-                        ).animate(
-                          CurvedAnimation(
-                            parent: progress,
-                            curve: Interval(
-                              isIncoming ? .12 : 0,
-                              isIncoming ? .82 : .42,
-                              curve: AppCurves.strongEaseOut,
-                            ),
-                          ),
-                        );
-                        final scale = Tween<double>(
-                          begin: reduceMotion
-                              ? 1
-                              : isIncoming
-                              ? .985
-                              : 1,
-                          end: reduceMotion
-                              ? 1
-                              : isIncoming
-                              ? 1
-                              : .97,
-                        ).animate(
-                          CurvedAnimation(
-                            parent: progress,
-                            curve: AppCurves.menuPage,
-                          ),
-                        );
+                        final position =
+                            Tween<Offset>(
+                              begin: isIncoming
+                                  ? Offset(.065 * direction, 0)
+                                  : Offset.zero,
+                              end: isIncoming
+                                  ? Offset.zero
+                                  : Offset(-.032 * direction, 0),
+                            ).animate(
+                              CurvedAnimation(
+                                parent: progress,
+                                curve: AppCurves.menuPage,
+                              ),
+                            );
+                        final opacity =
+                            Tween<double>(
+                              begin: isIncoming ? 0 : 1,
+                              end: isIncoming ? 1 : 0,
+                            ).animate(
+                              CurvedAnimation(
+                                parent: progress,
+                                curve: Interval(
+                                  isIncoming ? .12 : 0,
+                                  isIncoming ? .82 : .42,
+                                  curve: AppCurves.strongEaseOut,
+                                ),
+                              ),
+                            );
+                        final scale =
+                            Tween<double>(
+                              begin: reduceMotion
+                                  ? 1
+                                  : isIncoming
+                                  ? .985
+                                  : 1,
+                              end: reduceMotion
+                                  ? 1
+                                  : isIncoming
+                                  ? 1
+                                  : .97,
+                            ).animate(
+                              CurvedAnimation(
+                                parent: progress,
+                                curve: AppCurves.menuPage,
+                              ),
+                            );
                         return FadeTransition(
                           opacity: opacity,
                           child: SlideTransition(
@@ -348,6 +354,16 @@ class _NowPlayingPanelState extends State<NowPlayingPanel> {
                       active: false,
                       dimension: actionSize,
                       onPressed: widget.onPlaybackModePressed,
+                    ),
+                    _ActionButton(
+                      key: const ValueKey('player-queue-button'),
+                      icon: Icons.queue_music_rounded,
+                      tooltip: widget.queueLength == 0
+                          ? '播放队列'
+                          : '播放队列，${widget.queueLength} 首',
+                      active: false,
+                      dimension: actionSize,
+                      onPressed: widget.onQueuePressed,
                     ),
                   ],
                 ),
@@ -727,9 +743,7 @@ class _ArtworkView extends StatelessWidget {
             height: size,
             transform: matrix,
             transformAlignment: Alignment.center,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(24),
-            ),
+            decoration: BoxDecoration(borderRadius: BorderRadius.circular(24)),
             child: Stack(
               fit: StackFit.expand,
               children: [
@@ -1135,9 +1149,7 @@ class _AudioOutputPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final external = _isExternal;
-    final accent = external
-        ? const Color(0xFF31C27C)
-        : const Color(0x80FFFFFF);
+    final accent = external ? const Color(0xFF31C27C) : const Color(0x80FFFFFF);
     final textColor = external
         ? const Color(0xD9FFFFFF)
         : const Color(0x8FFFFFFF);
@@ -1285,8 +1297,7 @@ class _LyricLineText extends StatelessWidget {
       }
       if (position > word.time && word.duration.inMilliseconds > 0) {
         final elapsed = position - word.time;
-        final progress =
-            elapsed.inMilliseconds / word.duration.inMilliseconds;
+        final progress = elapsed.inMilliseconds / word.duration.inMilliseconds;
         completedLength += wordLength * progress.clamp(0.0, 1.0);
       }
       break;

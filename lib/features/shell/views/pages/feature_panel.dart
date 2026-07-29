@@ -54,28 +54,24 @@ class _FeaturePanelState extends State<FeaturePanel>
       parent: _entranceController,
       curve: const Interval(0, .68, curve: AppCurves.strongEaseOut),
     );
-    _headerPosition = Tween<Offset>(
-      begin: const Offset(.035, 0),
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(
-        parent: _entranceController,
-        curve: const Interval(0, .78, curve: AppCurves.menuPage),
-      ),
-    );
+    _headerPosition =
+        Tween<Offset>(begin: const Offset(.035, 0), end: Offset.zero).animate(
+          CurvedAnimation(
+            parent: _entranceController,
+            curve: const Interval(0, .78, curve: AppCurves.menuPage),
+          ),
+        );
     _bodyOpacity = CurvedAnimation(
       parent: _entranceController,
       curve: const Interval(.12, 1, curve: AppCurves.strongEaseOut),
     );
-    _bodyPosition = Tween<Offset>(
-      begin: const Offset(.07, 0),
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(
-        parent: _entranceController,
-        curve: const Interval(.08, 1, curve: AppCurves.menuPage),
-      ),
-    );
+    _bodyPosition = Tween<Offset>(begin: const Offset(.07, 0), end: Offset.zero)
+        .animate(
+          CurvedAnimation(
+            parent: _entranceController,
+            curve: const Interval(.08, 1, curve: AppCurves.menuPage),
+          ),
+        );
     _lastSelectedIndex = widget.controller.selectedIndex;
     widget.controller.addListener(_handleChange);
     if (widget.isActive) {
@@ -155,7 +151,8 @@ class _FeaturePanelState extends State<FeaturePanel>
 
   @override
   Widget build(BuildContext context) {
-    final reduceMotion = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final reduceMotion =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
 
     Widget entrance({
       required Widget child,
@@ -341,9 +338,7 @@ class _FeaturePanelState extends State<FeaturePanel>
       return FeatureMessageState(
         icon: isSearch ? Icons.search_rounded : Icons.library_music_rounded,
         title: isSearch ? '输入关键词搜索' : '暂无内容',
-        subtitle: isSearch
-            ? '在上方输入关键词搜索 QQ 音乐'
-            : '当前列表为空，试试刷新或换个入口',
+        subtitle: isSearch ? '在上方输入关键词搜索 QQ 音乐' : '当前列表为空，试试刷新或换个入口',
         actionLabel: isSearch ? null : '刷新',
         onAction: isSearch ? null : controller.refresh,
       );
@@ -360,7 +355,7 @@ class _FeaturePanelState extends State<FeaturePanel>
           controller: _listController,
           // Bottom padding clears the superellipse glass curve so the last
           // card is fully visible (matches top breathing room).
-          padding: const EdgeInsets.only(right: 8, bottom: _listBottomPad),
+          padding: const EdgeInsets.only(bottom: _listBottomPad),
           itemExtent: 94,
           itemCount: controller.items.length,
           itemBuilder: (context, index) {
@@ -382,7 +377,7 @@ class _FeaturePanelState extends State<FeaturePanel>
       child: ListView.builder(
         key: const ValueKey('api-feature-list'),
         controller: _listController,
-        padding: const EdgeInsets.only(right: 8, bottom: _listBottomPad),
+        padding: const EdgeInsets.only(bottom: _listBottomPad),
         itemExtent: 58,
         itemCount: controller.items.length,
         itemBuilder: (context, index) {

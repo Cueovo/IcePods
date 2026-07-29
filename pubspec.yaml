@@ -53,6 +53,7 @@ dependencies:
   # 7.1+ uses NWPath.isUltraConstrained (iOS 26), which breaks older Xcode/SDK CI.
   connectivity_plus: 7.0.0
   archive: ^4.0.9
+  lottie: ^3.3.1
 
 dev_dependencies:
   flutter_test:
@@ -77,6 +78,7 @@ flutter:
   uses-material-design: true
 
   assets:
+    - assets/Scene.json
     - assets/sounds/click_tick.wav
 
   # An image asset can refer to one or more resolution-specific "variants", see

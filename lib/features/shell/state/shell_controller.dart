@@ -26,7 +26,9 @@ class ShellController extends ChangeNotifier {
        pageController = pageController ?? PageController(),
        _chassisColorStore = chassisColorStore ?? ChassisColorStore(),
        _settingsStore = settingsStore ?? AppSettingsStore(),
-       inactivePlaybackProgress = ValueNotifier(const QqMusicPlaybackProgress()) {
+       inactivePlaybackProgress = ValueNotifier(
+         const QqMusicPlaybackProgress(),
+       ) {
     music.addListener(_handleMusicStateChange);
     _lastControllerIsPlaying = music.isPlaying;
     unawaited(_initialize());
@@ -88,16 +90,29 @@ class ShellController extends ChangeNotifier {
 
   String descriptionForMenuEntry(MenuEntry entry) {
     final setting = entry.setting;
-    return setting == null ? entry.description : _settingFeedback[setting] ?? entry.description;
+    return setting == null
+        ? entry.description
+        : _settingFeedback[setting] ?? entry.description;
   }
 
   List<Album> get coverAlbums => music.coverFlowAlbums;
+
+  int get selectedQueueIndex {
+    final queue = music.playbackQueue;
+    if (queue.isEmpty) {
+      return 0;
+    }
+    return queueIndex.clamp(0, queue.length - 1).toInt();
+  }
+
+  int queueIndex = 0;
 
   int get pageIndex => switch (mode) {
     PlayerMode.menu => 0,
     PlayerMode.coverFlow => 1,
     PlayerMode.player => 2,
     PlayerMode.feature => 3,
+    PlayerMode.queue => 4,
   };
 
   Album get displayAlbum {
@@ -116,27 +131,29 @@ class ShellController extends ChangeNotifier {
 
   String get ambientImageUrl => switch (mode) {
     // Follow the highlighted menu entry so the blur updates while browsing.
-    PlayerMode.menu => selectedMenuEntry.imageUrl.isNotEmpty
-        ? selectedMenuEntry.imageUrl
-        : (music.currentSong?.imageUrl.isNotEmpty == true
-              ? music.currentSong!.imageUrl
-              : (coverAlbums.isNotEmpty
-                    ? coverAlbums[coverIndex.clamp(0, coverAlbums.length - 1)]
-                          .imageUrl
-                    : '')),
+    PlayerMode.menu =>
+      selectedMenuEntry.imageUrl.isNotEmpty
+          ? selectedMenuEntry.imageUrl
+          : (music.currentSong?.imageUrl.isNotEmpty == true
+                ? music.currentSong!.imageUrl
+                : (coverAlbums.isNotEmpty
+                      ? coverAlbums[coverIndex.clamp(0, coverAlbums.length - 1)]
+                            .imageUrl
+                      : '')),
     PlayerMode.coverFlow =>
       coverAlbums.isEmpty
           ? ''
           : coverAlbums[coverIndex.clamp(0, coverAlbums.length - 1)].imageUrl,
     PlayerMode.player => displayAlbum.imageUrl,
     PlayerMode.feature => activeFeature?.imageUrl ?? selectedMenuEntry.imageUrl,
+    PlayerMode.queue => displayAlbum.imageUrl,
   };
 
   bool get wheelIsPlaying =>
       music.currentSong == null ? isPlayingLocally : music.isPlaying;
 
   ValueNotifier<QqMusicPlaybackProgress> get playbackProgressListenable =>
-      mode == PlayerMode.player
+      mode == PlayerMode.player || mode == PlayerMode.queue
       ? music.playbackProgress
       : inactivePlaybackProgress;
 
@@ -154,6 +171,12 @@ class ShellController extends ChangeNotifier {
     if (coverIndex >= albums.length) {
       coverIndex = albums.isEmpty ? 0 : albums.length - 1;
     }
+    final queue = music.playbackQueue;
+    if (queue.isEmpty) {
+      queueIndex = 0;
+    } else {
+      queueIndex = queueIndex.clamp(0, queue.length - 1).toInt();
+    }
     notifyListeners();
   }
 
@@ -166,6 +189,7 @@ class ShellController extends ChangeNotifier {
       PlayerMode.coverFlow => 1,
       PlayerMode.player => 2,
       PlayerMode.feature => 3,
+      PlayerMode.queue => 4,
     };
     final currentPage = pageController.hasClients
         ? (pageController.page ?? pageIndex.toDouble()).round()
@@ -267,6 +291,14 @@ class ShellController extends ChangeNotifier {
     }
     if (mode == PlayerMode.feature) {
       unawaited(_activateFeatureSelection());
+      return;
+    }
+    if (mode == PlayerMode.queue) {
+      unawaited(_activateQueueSelection());
+      return;
+    }
+    if (mode == PlayerMode.player) {
+      openQueue();
     }
   }
 
@@ -307,18 +339,77 @@ class ShellController extends ChangeNotifier {
     await switchMode(PlayerMode.player);
   }
 
+  void openQueue() {
+    if (mode == PlayerMode.queue) {
+      return;
+    }
+    final queue = music.playbackQueue;
+    final currentIndex = music.currentPlaybackQueueIndex;
+    queueIndex = currentIndex >= 0
+        ? currentIndex
+        : (queue.isEmpty ? 0 : queueIndex.clamp(0, queue.length - 1).toInt());
+    unawaited(switchMode(PlayerMode.queue));
+  }
+
+  Future<void> _activateQueueSelection() async {
+    await playQueueIndex(selectedQueueIndex);
+  }
+
+  Future<void> playQueueIndex(int index) async {
+    final queue = music.playbackQueue;
+    if (index < 0 || index >= queue.length) {
+      return;
+    }
+    queueIndex = index;
+    notifyListeners();
+    final played = await music.playQueueIndex(index);
+    if (_disposed || !played) {
+      return;
+    }
+    hasLocalSelection = false;
+    if (mode == PlayerMode.queue) {
+      await switchMode(PlayerMode.player);
+    }
+  }
+
+  void removeQueueIndex(int index) {
+    if (!music.removeQueueIndex(index)) {
+      return;
+    }
+    final queue = music.playbackQueue;
+    queueIndex = queue.isEmpty
+        ? 0
+        : queueIndex.clamp(0, queue.length - 1).toInt();
+    notifyListeners();
+  }
+
+  void clearUpcomingQueue() {
+    if (!music.clearUpcomingQueue()) {
+      return;
+    }
+    final currentIndex = music.currentPlaybackQueueIndex;
+    queueIndex = currentIndex < 0 ? 0 : currentIndex;
+    notifyListeners();
+  }
+
   void handleMenu() {
     _lightImpact();
     _tick();
     if (mode == PlayerMode.feature && music.back()) {
       return;
     }
+    if (mode == PlayerMode.queue) {
+      unawaited(switchMode(PlayerMode.player));
+      return;
+    }
     if (mode == PlayerMode.menu && menuPath.length > 1) {
       menuPath.removeLast();
       notifyListeners();
-    } else if (mode == PlayerMode.player && previousMode == PlayerMode.feature) {
+    } else if (mode == PlayerMode.player &&
+        previousMode == PlayerMode.feature) {
       unawaited(switchMode(PlayerMode.feature));
-    } else if (mode == PlayerMode.player && previousMode == PlayerMode.coverFlow) {
+    } else if (mode == PlayerMode.player &&
+        previousMode == PlayerMode.coverFlow) {
       unawaited(switchMode(PlayerMode.coverFlow));
     } else if (mode != PlayerMode.menu) {
       if (mode == PlayerMode.feature) {
@@ -331,7 +422,10 @@ class ShellController extends ChangeNotifier {
   void handleRotate(double delta) {
     if (mode == PlayerMode.player) {
       seekPreviewRevision += 1;
-      playerRotationDelta = (playerRotationDelta + delta * .35).clamp(-28.0, 28.0);
+      playerRotationDelta = (playerRotationDelta + delta * .35).clamp(
+        -28.0,
+        28.0,
+      );
       final currentProgress =
           seekPreviewProgress ??
           (music.currentSong == null ? progress : music.progress);
@@ -408,6 +502,22 @@ class ShellController extends ChangeNotifier {
       _tick();
       return true;
     }
+    if (mode == PlayerMode.queue) {
+      final queue = music.playbackQueue;
+      if (queue.isEmpty) {
+        return false;
+      }
+      final next = (selectedQueueIndex + direction)
+          .clamp(0, queue.length - 1)
+          .toInt();
+      if (next == selectedQueueIndex) {
+        return false;
+      }
+      queueIndex = next;
+      _selectionClick();
+      _tick();
+      return true;
+    }
     return false;
   }
 
@@ -442,6 +552,16 @@ class ShellController extends ChangeNotifier {
     }
     if (mode == PlayerMode.feature) {
       music.stepSelection(direction);
+      return;
+    }
+    if (mode == PlayerMode.queue) {
+      final queue = music.playbackQueue;
+      if (queue.isNotEmpty) {
+        queueIndex = (selectedQueueIndex + direction)
+            .clamp(0, queue.length - 1)
+            .toInt();
+        notifyListeners();
+      }
       return;
     }
     if (mode == PlayerMode.player && music.currentSong != null) {
@@ -553,9 +673,7 @@ class ShellController extends ChangeNotifier {
         }
       case AppSetting.haptics:
         hapticsEnabled = !hapticsEnabled;
-        _settingFeedback[setting] = hapticsEnabled
-            ? '触感反馈已开启。'
-            : '触感反馈已关闭。';
+        _settingFeedback[setting] = hapticsEnabled ? '触感反馈已开启。' : '触感反馈已关闭。';
         notifyListeners();
         if (hapticsEnabled) {
           await HapticFeedback.mediumImpact();

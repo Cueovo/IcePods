@@ -26,6 +26,7 @@ abstract final class AppRadii {
 
 abstract final class AppDurations {
   static const quick = Duration(milliseconds: 180);
+  static const splashExit = Duration(milliseconds: 260);
   static const menuPage = Duration(milliseconds: 240);
   static const reducedMotion = Duration(milliseconds: 200);
   static const standard = Duration(milliseconds: 300);

@@ -12,6 +12,7 @@ import 'package:qqmusic_ipod/core/theme/widgets/click_wheel.dart';
 import 'package:qqmusic_ipod/features/player/state/controller.dart';
 import 'package:qqmusic_ipod/features/player/views/pages/now_playing_panel.dart';
 import 'package:qqmusic_ipod/features/player/views/widgets/cover_flow_panel.dart';
+import 'package:qqmusic_ipod/features/player/views/widgets/playback_queue_panel.dart';
 import 'package:qqmusic_ipod/features/shell/models/ipod_models.dart';
 import 'package:qqmusic_ipod/features/shell/state/shell_controller.dart';
 import 'package:qqmusic_ipod/features/shell/views/pages/feature_panel.dart';
@@ -66,7 +67,6 @@ class _IpodScreenState extends State<IpodScreen> with WidgetsBindingObserver {
       });
     }
   }
-
 
   void _hideSystemStatusBar() {
     // Keep re-asserting immersive sticky — Meizu gesture often leaves the bar shown.
@@ -139,7 +139,12 @@ class _IpodShellView extends StatelessWidget {
     // Single dark bezel with a softer inner glass edge.
     final frame = ChassisFrameColors.fromChassis(shell.chassisColor);
     const glassRimWidth = 1.0;
-    final bezelPadding = chassisInsets.bezelPadding;
+    final bezelPadding = EdgeInsets.fromLTRB(
+      chassisInsets.bezelHorizontal,
+      chassisInsets.bezelTop,
+      chassisInsets.bezelHorizontal,
+      0,
+    );
     // Corner radius follows side/bottom bezel only — never the tall top band
     // used to wrap a camera hole (that would collapse the glass clip).
     final glassRadius = _insetBorderRadius(
@@ -219,7 +224,8 @@ class _IpodShellView extends StatelessWidget {
                               fit: StackFit.expand,
                               children: [
                                 // Ambient / glow only inside the screen.
-                                if (shell.mode == PlayerMode.feature)
+                                if (shell.mode == PlayerMode.feature ||
+                                    shell.mode == PlayerMode.queue)
                                   DecoratedBox(
                                     decoration: BoxDecoration(
                                       gradient: RadialGradient(
@@ -291,6 +297,22 @@ class _IpodShellView extends StatelessWidget {
                                             )
                                           else
                                             const SizedBox.shrink(),
+                                          PlaybackQueuePanel(
+                                            queue: shell.music.playbackQueue,
+                                            currentIndex: shell
+                                                .music
+                                                .currentPlaybackQueueIndex,
+                                            selectedIndex:
+                                                shell.selectedQueueIndex,
+                                            isPlaying: shell.music.isPlaying,
+                                            onPlayIndex: (index) => unawaited(
+                                              shell.playQueueIndex(index),
+                                            ),
+                                            onRemoveIndex:
+                                                shell.removeQueueIndex,
+                                            onClearUpcoming:
+                                                shell.clearUpcomingQueue,
+                                          ),
                                         ],
                                       ),
                                     ),
@@ -383,7 +405,8 @@ class _MenuPageTransitionState extends State<_MenuPageTransition> {
 
   @override
   Widget build(BuildContext context) {
-    final reduceMotion = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final reduceMotion =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
     final enteringOffset = reduceMotion
         ? Offset.zero
         : _isForward
@@ -412,28 +435,28 @@ class _MenuPageTransitionState extends State<_MenuPageTransition> {
         },
         transitionBuilder: (child, animation) {
           final isIncoming = child.key == currentKey;
-          final progress = isIncoming
-              ? animation
-              : ReverseAnimation(animation);
-          final position = Tween<Offset>(
-            begin: isIncoming ? enteringOffset : Offset.zero,
-            end: isIncoming ? Offset.zero : exitingOffset,
-          ).animate(
-            CurvedAnimation(parent: progress, curve: AppCurves.menuPage),
-          );
-          final opacity = Tween<double>(
-            begin: isIncoming ? 0 : 1,
-            end: isIncoming ? 1 : 0,
-          ).animate(
-            CurvedAnimation(
-              parent: progress,
-              curve: Interval(
-                isIncoming ? .08 : 0,
-                isIncoming ? .72 : .38,
-                curve: AppCurves.strongEaseOut,
-              ),
-            ),
-          );
+          final progress = isIncoming ? animation : ReverseAnimation(animation);
+          final position =
+              Tween<Offset>(
+                begin: isIncoming ? enteringOffset : Offset.zero,
+                end: isIncoming ? Offset.zero : exitingOffset,
+              ).animate(
+                CurvedAnimation(parent: progress, curve: AppCurves.menuPage),
+              );
+          final opacity =
+              Tween<double>(
+                begin: isIncoming ? 0 : 1,
+                end: isIncoming ? 1 : 0,
+              ).animate(
+                CurvedAnimation(
+                  parent: progress,
+                  curve: Interval(
+                    isIncoming ? .08 : 0,
+                    isIncoming ? .72 : .38,
+                    curve: AppCurves.strongEaseOut,
+                  ),
+                ),
+              );
           return FadeTransition(
             opacity: opacity,
             child: SlideTransition(position: position, child: child),
@@ -493,8 +516,10 @@ class _NowPlayingHost extends StatelessWidget {
           isLiked: shell.music.isCurrentSongLiked,
           isSeeking: preview != null,
           playbackMode: shell.music.playbackMode,
+          queueLength: shell.music.playbackQueue.length,
           onLikedPressed: () => unawaited(shell.music.toggleCurrentSongLiked()),
           onPlaybackModePressed: shell.music.cyclePlaybackMode,
+          onQueuePressed: shell.openQueue,
         );
       },
     );

@@ -228,9 +228,8 @@ class QqMusicController extends ChangeNotifier {
   QqMusicItem? _currentSong;
   QqMusicLyrics? _lyrics;
   QqMusicPlaybackMode _playbackMode = QqMusicPlaybackMode.sequential;
-  String _audioOutputName = !kIsWeb && defaultTargetPlatform == TargetPlatform.android
-      ? '本机扬声器'
-      : '';
+  String _audioOutputName =
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android ? '本机扬声器' : '';
   Uri? _lastExternalUri;
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
@@ -256,6 +255,20 @@ class QqMusicController extends ChangeNotifier {
   QqMusicUserProfile? get profile => _profile;
   QqMusicItem? get currentSong => _currentSong;
   List<QqMusicItem> get playbackQueue => _playbackQueue;
+  int get currentPlaybackQueueIndex {
+    final current = _currentSong;
+    if (current == null) {
+      return -1;
+    }
+    return _playbackQueue.indexWhere((item) => _sameSong(item, current));
+  }
+
+  bool isCurrentPlaybackQueueIndex(int index) {
+    return index >= 0 &&
+        index < _playbackQueue.length &&
+        _sameSong(_playbackQueue[index], _currentSong);
+  }
+
   QqMusicLyrics? get lyrics => _lyrics;
   bool get isLoadingLyrics => _isLoadingLyrics;
   QqMusicPlaybackMode get playbackMode => _playbackMode;
@@ -1018,7 +1031,8 @@ class QqMusicController extends ChangeNotifier {
     final active = result;
     final feature = _entry?.feature;
     final container = currentContainer;
-    final nearEnd = forceNearEnd ||
+    final nearEnd =
+        forceNearEnd ||
         _selectedIndex >= items.length - 3 ||
         (feature == QqMusicFeature.radar && _selectedIndex >= items.length - 1);
     if (active == null ||
@@ -1174,6 +1188,52 @@ class QqMusicController extends ChangeNotifier {
     _containerPath.removeLast();
     _selectedIndex = 0;
     _error = '';
+    notifyListeners();
+    return true;
+  }
+
+  Future<bool> playQueueIndex(int index) async {
+    if (index < 0 || index >= _playbackQueue.length) {
+      return false;
+    }
+    return play(_playbackQueue[index], preservePlaybackQueue: true);
+  }
+
+  bool removeQueueIndex(int index) {
+    if (index < 0 || index >= _playbackQueue.length) {
+      return false;
+    }
+    if (index == currentPlaybackQueueIndex) {
+      return false;
+    }
+    final nextQueue = List<QqMusicItem>.from(_playbackQueue);
+    final removed = nextQueue.removeAt(index);
+    _playbackQueue = List.unmodifiable(nextQueue);
+    if (!nextQueue.any((item) => _sameSong(item, removed))) {
+      _prefetchedPlayableUrls.remove(_songKey(removed));
+    }
+    _schedulePlaybackStateSave(immediate: true);
+    notifyListeners();
+    return true;
+  }
+
+  bool clearUpcomingQueue() {
+    if (_playbackQueue.isEmpty) {
+      return false;
+    }
+    final currentIndex = currentPlaybackQueueIndex;
+    final current = _currentSong;
+    final nextQueue = currentIndex >= 0
+        ? <QqMusicItem>[_playbackQueue[currentIndex]]
+        : current == null
+        ? const <QqMusicItem>[]
+        : <QqMusicItem>[current];
+    if (nextQueue.length == _playbackQueue.length) {
+      return false;
+    }
+    _playbackQueue = List.unmodifiable(nextQueue);
+    _prefetchedPlayableUrls.clear();
+    _schedulePlaybackStateSave(immediate: true);
     notifyListeners();
     return true;
   }
