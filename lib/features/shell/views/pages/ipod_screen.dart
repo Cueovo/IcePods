@@ -139,12 +139,7 @@ class _IpodShellView extends StatelessWidget {
     // Single dark bezel with a softer inner glass edge.
     final frame = ChassisFrameColors.fromChassis(shell.chassisColor);
     const glassRimWidth = 1.0;
-    final bezelPadding = EdgeInsets.fromLTRB(
-      chassisInsets.bezelHorizontal,
-      chassisInsets.bezelTop,
-      chassisInsets.bezelHorizontal,
-      0,
-    );
+    final bezelPadding = chassisInsets.bezelPadding;
     // Corner radius follows side/bottom bezel only — never the tall top band
     // used to wrap a camera hole (that would collapse the glass clip).
     final glassRadius = _insetBorderRadius(
@@ -203,6 +198,7 @@ class _IpodShellView extends StatelessWidget {
                       ),
                     ),
                     child: Padding(
+                      key: const ValueKey('ipod-screen-bezel-padding'),
                       // Thicker top bezel only when insets request it; sides stay even.
                       padding: bezelPadding,
                       child: DecoratedBox(
