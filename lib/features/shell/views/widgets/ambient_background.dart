@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -7,9 +8,14 @@ import 'package:qqmusic_ipod/core/theme/tokens/app_tokens.dart';
 import 'package:qqmusic_ipod/core/theme/widgets/artwork_image.dart';
 
 class AmbientBackground extends StatefulWidget {
-  const AmbientBackground({required this.imageUrl, super.key});
+  const AmbientBackground({
+    required this.imageUrl,
+    this.customImagePath,
+    super.key,
+  });
 
   final String imageUrl;
+  final String? customImagePath;
 
   @override
   State<AmbientBackground> createState() => _AmbientBackgroundState();
@@ -37,12 +43,17 @@ class _AmbientBackgroundState extends State<AmbientBackground> {
   @override
   void didUpdateWidget(AmbientBackground oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.imageUrl != widget.imageUrl) {
+    if (oldWidget.imageUrl != widget.imageUrl ||
+        oldWidget.customImagePath != widget.customImagePath) {
       _loadRequestedImage();
     }
   }
 
   void _loadRequestedImage() {
+    if (widget.customImagePath?.isNotEmpty == true) {
+      _loadingImageUrl = '';
+      return;
+    }
     final resolved = widget.imageUrl.replaceFirst(
       _qqHttpCoverHost,
       'https://y.gtimg.cn/',
@@ -94,6 +105,8 @@ class _AmbientBackgroundState extends State<AmbientBackground> {
   @override
   Widget build(BuildContext context) {
     final screenSize = MediaQuery.sizeOf(context);
+    final pixelRatio = MediaQuery.devicePixelRatioOf(context);
+    final customImagePath = widget.customImagePath;
     final seed = widget.imageUrl.codeUnits.fold<int>(
       0,
       (sum, value) => sum + value,
@@ -143,7 +156,23 @@ class _AmbientBackgroundState extends State<AmbientBackground> {
                 ?currentChild,
               ],
             ),
-            child: _displayedImageUrl.isEmpty
+            child: customImagePath != null && customImagePath.isNotEmpty
+                ? RepaintBoundary(
+                    key: ValueKey('custom-background-$customImagePath'),
+                    child: Image.file(
+                      File(customImagePath),
+                      fit: BoxFit.cover,
+                      cacheWidth: (screenSize.width * pixelRatio).round(),
+                      cacheHeight: (screenSize.height * pixelRatio).round(),
+                      filterQuality: FilterQuality.medium,
+                      gaplessPlayback: true,
+                      errorBuilder: (context, error, stackTrace) =>
+                          const SizedBox.expand(
+                            key: ValueKey('custom-background-error'),
+                          ),
+                    ),
+                  )
+                : _displayedImageUrl.isEmpty
                 ? const SizedBox.expand(
                     key: ValueKey('ambient-local-placeholder'),
                   )

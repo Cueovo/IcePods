@@ -359,12 +359,7 @@ class QqMusicOfficialApi implements QqMusicApi {
   @override
   Future<void> setSongLiked(QqMusicItem song, {required bool liked}) {
     return _runDirect(
-      () => _playlist.mutateSongs(
-        '201',
-        [song],
-        add: liked,
-        credential: _requireCredential(),
-      ),
+      () => _mutatePlaylistSongsWithCredentialRetry('201', [song], add: liked),
     );
   }
 
@@ -428,11 +423,10 @@ class QqMusicOfficialApi implements QqMusicApi {
   @override
   Future<void> addSongsToPlaylist(String directoryId, List<QqMusicItem> songs) {
     return _runDirect(
-      () => _playlist.mutateSongs(
+      () => _mutatePlaylistSongsWithCredentialRetry(
         directoryId,
         songs,
         add: true,
-        credential: _requireCredential(),
       ),
     );
   }
@@ -443,13 +437,51 @@ class QqMusicOfficialApi implements QqMusicApi {
     List<QqMusicItem> songs,
   ) {
     return _runDirect(
-      () => _playlist.mutateSongs(
+      () => _mutatePlaylistSongsWithCredentialRetry(
         directoryId,
         songs,
         add: false,
-        credential: _requireCredential(),
       ),
     );
+  }
+
+  Future<void> _mutatePlaylistSongsWithCredentialRetry(
+    String directoryId,
+    List<QqMusicItem> songs, {
+    required bool add,
+  }) async {
+    var active = _requireCredential();
+    try {
+      await _playlist.mutateSongs(
+        directoryId,
+        songs,
+        add: add,
+        credential: active,
+      );
+      return;
+    } on QqMusicDirectException catch (error) {
+      if (error.code != 80105) {
+        rethrow;
+      }
+    }
+    try {
+      active = await _login.refreshCredential(active);
+      await _playlist.mutateSongs(
+        directoryId,
+        songs,
+        add: add,
+        credential: active,
+      );
+    } on QqMusicDirectException catch (error) {
+      if (error.code == 80105 || error.isUnauthorized) {
+        throw const QqMusicApiException(
+          '登录凭据已失效，请退出后重新登录',
+          statusCode: 401,
+          code: 80105,
+        );
+      }
+      rethrow;
+    }
   }
 
   QqMusicCredential _requireCredential() {

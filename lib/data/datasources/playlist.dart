@@ -59,15 +59,23 @@ class QqMusicPlaylistModule {
           'dirId': int.tryParse(directoryId) ?? 0,
           'v_songInfo': [
             for (final song in valid)
-              {
-                'songId': int.parse(song.id),
-                'songType': 0,
-              },
+              {'songId': int.parse(song.id), 'songType': 0},
           ],
         },
       ),
       credential: credential,
-      platform: QqMusicRequestPlatform.android,
+      comm: {
+        'ct': '11',
+        'cv': 13020508,
+        'v': 13020508,
+        'tmeAppID': 'qqmusic',
+        'uid': credential.musicId,
+        'qq': credential.musicId,
+        'authst': credential.musicKey,
+        'tmeLoginType': '${credential.effectiveLoginType}',
+        'loginUin': credential.musicId,
+      },
+      platform: QqMusicRequestPlatform.web,
     );
     _ensureSuccess(data, add ? '添加歌曲失败' : '移除歌曲失败');
   }

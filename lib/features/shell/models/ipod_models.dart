@@ -19,6 +19,10 @@ enum MenuSection {
   musicHall,
   myMusic,
   settings,
+  playbackSettings,
+  controlSettings,
+  appearanceSettings,
+  systemSettings,
   chassisColor,
 }
 

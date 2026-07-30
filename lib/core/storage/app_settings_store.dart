@@ -3,7 +3,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 enum AppSetting {
   clickSound,
   playbackQuality,
+  gaplessPlayback,
+  sleepTimer,
   volumeLimit,
+  customBackground,
+  clearCustomBackground,
   haptics,
   clearCache,
   about,
@@ -37,18 +41,38 @@ enum AppVolumeLimit {
       AppVolumeLimit.values[(index + 1) % AppVolumeLimit.values.length];
 }
 
+enum AppSleepTimer {
+  off('关闭', null),
+  minutes15('15 分钟', Duration(minutes: 15)),
+  minutes30('30 分钟', Duration(minutes: 30)),
+  minutes60('60 分钟', Duration(minutes: 60)),
+  minutes90('90 分钟', Duration(minutes: 90));
+
+  const AppSleepTimer(this.label, this.duration);
+
+  final String label;
+  final Duration? duration;
+
+  AppSleepTimer get next =>
+      AppSleepTimer.values[(index + 1) % AppSleepTimer.values.length];
+}
+
 class AppSettingsSnapshot {
   const AppSettingsSnapshot({
     this.clickSoundEnabled = true,
     this.hapticsEnabled = true,
+    this.gaplessPlaybackEnabled = false,
     this.playbackQuality = PlaybackQuality.standard,
     this.volumeLimit = AppVolumeLimit.off,
+    this.customBackgroundPath,
   });
 
   final bool clickSoundEnabled;
   final bool hapticsEnabled;
+  final bool gaplessPlaybackEnabled;
   final PlaybackQuality playbackQuality;
   final AppVolumeLimit volumeLimit;
+  final String? customBackgroundPath;
 }
 
 class AppSettingsStore {
@@ -56,8 +80,11 @@ class AppSettingsStore {
 
   static const _clickSoundKey = 'ipod.settings.click_sound';
   static const _hapticsKey = 'ipod.settings.haptics';
+  static const _gaplessPlaybackKey = 'ipod.settings.gapless_playback';
   static const _playbackQualityKey = 'ipod.settings.playback_quality';
   static const _volumeLimitKey = 'ipod.settings.volume_limit';
+  static const _customBackgroundPathKey =
+      'ipod.settings.custom_background_path';
 
   SharedPreferences? _preferences;
 
@@ -70,6 +97,8 @@ class AppSettingsStore {
     return AppSettingsSnapshot(
       clickSoundEnabled: preferences.getBool(_clickSoundKey) ?? true,
       hapticsEnabled: preferences.getBool(_hapticsKey) ?? true,
+      gaplessPlaybackEnabled: preferences.getBool(_gaplessPlaybackKey) ?? false,
+      customBackgroundPath: preferences.getString(_customBackgroundPathKey),
       playbackQuality: _enumByName(
         PlaybackQuality.values,
         preferences.getString(_playbackQualityKey),
@@ -87,6 +116,19 @@ class AppSettingsStore {
     final preferences = await _prefs();
     await preferences.setBool(_clickSoundKey, settings.clickSoundEnabled);
     await preferences.setBool(_hapticsKey, settings.hapticsEnabled);
+    await preferences.setBool(
+      _gaplessPlaybackKey,
+      settings.gaplessPlaybackEnabled,
+    );
+    final customBackgroundPath = settings.customBackgroundPath;
+    if (customBackgroundPath == null || customBackgroundPath.isEmpty) {
+      await preferences.remove(_customBackgroundPathKey);
+    } else {
+      await preferences.setString(
+        _customBackgroundPathKey,
+        customBackgroundPath,
+      );
+    }
     await preferences.setString(
       _playbackQualityKey,
       settings.playbackQuality.name,

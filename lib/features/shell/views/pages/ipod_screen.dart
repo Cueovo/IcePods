@@ -183,7 +183,7 @@ class _IpodShellView extends StatelessWidget {
           child: Column(
             children: [
               Expanded(
-                flex: 56,
+                flex: 60,
                 child: Padding(
                   // Inset on all sides so continuous corners + bezel sit on chassis.
                   // Top scales down on notch/island (status bar already tall inside).
@@ -220,8 +220,9 @@ class _IpodShellView extends StatelessWidget {
                               fit: StackFit.expand,
                               children: [
                                 // Ambient / glow only inside the screen.
-                                if (shell.mode == PlayerMode.feature ||
-                                    shell.mode == PlayerMode.queue)
+                                if (!shell.hasCustomBackground &&
+                                    (shell.mode == PlayerMode.feature ||
+                                        shell.mode == PlayerMode.queue))
                                   DecoratedBox(
                                     decoration: BoxDecoration(
                                       gradient: RadialGradient(
@@ -237,6 +238,7 @@ class _IpodShellView extends StatelessWidget {
                                 else
                                   AmbientBackground(
                                     imageUrl: shell.ambientImageUrl,
+                                    customImagePath: shell.customBackgroundPath,
                                   ),
                                 // Soft mid-screen dim only — fade out before the
                                 // bottom so the frame edge stays crisp.
@@ -290,6 +292,9 @@ class _IpodShellView extends StatelessWidget {
                                               isActive:
                                                   shell.mode ==
                                                   PlayerMode.feature,
+                                              onOpenLyrics:
+                                                  shell.openPlayerLyrics,
+                                              onOpenQueue: shell.openQueue,
                                             )
                                           else
                                             const SizedBox.shrink(),
@@ -325,7 +330,7 @@ class _IpodShellView extends StatelessWidget {
               ),
               if (!keyboardVisible)
                 Expanded(
-                  flex: 48,
+                  flex: 44,
                   child: Align(
                     // Lower the wheel a bit so the larger screen has breathing room.
                     alignment: const Alignment(0, -0.12),
@@ -513,6 +518,7 @@ class _NowPlayingHost extends StatelessWidget {
           isSeeking: preview != null,
           playbackMode: shell.music.playbackMode,
           queueLength: shell.music.playbackQueue.length,
+          lyricsOpenRevision: shell.lyricsOpenRevision,
           onLikedPressed: () => unawaited(shell.music.toggleCurrentSongLiked()),
           onPlaybackModePressed: shell.music.cyclePlaybackMode,
           onQueuePressed: shell.openQueue,

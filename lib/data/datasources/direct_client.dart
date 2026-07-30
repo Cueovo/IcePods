@@ -255,11 +255,14 @@ class QqMusicDirectClient {
     final musicId = credential.stringMusicId.isNotEmpty
         ? credential.stringMusicId
         : credential.musicId;
+    final loginType = credential.effectiveLoginType;
     return [
       'uin=$musicId',
       'qqmusic_uin=$musicId',
       'qm_keyst=${credential.musicKey}',
       'qqmusic_key=${credential.musicKey}',
+      'tmeLoginType=$loginType',
+      if (loginType == 1) 'wxuin=$musicId',
     ].join('; ');
   }
 

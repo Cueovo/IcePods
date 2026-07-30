@@ -9,6 +9,7 @@ import 'package:qqmusic_ipod/core/audio/audio_handler.dart';
 import 'package:qqmusic_ipod/core/audio/click_sound_service.dart';
 import 'package:qqmusic_ipod/core/storage/app_settings_store.dart';
 import 'package:qqmusic_ipod/core/storage/chassis_color_store.dart';
+import 'package:qqmusic_ipod/core/storage/custom_background_picker.dart';
 import 'package:qqmusic_ipod/features/player/state/controller.dart';
 import 'package:qqmusic_ipod/features/shell/models/ipod_models.dart';
 import 'package:qqmusic_ipod/features/shell/models/menu_catalog.dart';
@@ -21,11 +22,14 @@ class ShellController extends ChangeNotifier {
     PageController? pageController,
     ChassisColorStore? chassisColorStore,
     AppSettingsStore? settingsStore,
+    CustomBackgroundPicker? customBackgroundPicker,
   }) : music = QqMusicController(api: api, audioHandler: audioHandler),
        _clickSound = clickSound ?? ClickSoundService(),
        pageController = pageController ?? PageController(),
        _chassisColorStore = chassisColorStore ?? ChassisColorStore(),
        _settingsStore = settingsStore ?? AppSettingsStore(),
+       _customBackgroundPicker =
+           customBackgroundPicker ?? CustomBackgroundPicker(),
        inactivePlaybackProgress = ValueNotifier(
          const QqMusicPlaybackProgress(),
        ) {
@@ -40,6 +44,7 @@ class ShellController extends ChangeNotifier {
   final PageController pageController;
   final ChassisColorStore _chassisColorStore;
   final AppSettingsStore _settingsStore;
+  final CustomBackgroundPicker _customBackgroundPicker;
   final ValueNotifier<QqMusicPlaybackProgress> inactivePlaybackProgress;
   final Map<AppSetting, String> _settingFeedback = {};
 
@@ -54,6 +59,7 @@ class ShellController extends ChangeNotifier {
   double playerRotationDelta = 0;
   double? seekPreviewProgress;
   int seekPreviewRevision = 0;
+  int lyricsOpenRevision = 0;
   bool isPlayingLocally = false;
   bool _lastControllerIsPlaying = false;
   bool hasLocalSelection = false;
@@ -64,6 +70,9 @@ class ShellController extends ChangeNotifier {
   bool hapticsEnabled = true;
   PlaybackQuality playbackQuality = PlaybackQuality.standard;
   AppVolumeLimit volumeLimit = AppVolumeLimit.off;
+  bool gaplessPlaybackEnabled = false;
+  AppSleepTimer sleepTimer = AppSleepTimer.off;
+  String? customBackgroundPath;
 
   MenuPage get currentMenuPage => qqMusicMenuPages[menuPath.last]!;
 
@@ -80,7 +89,14 @@ class ShellController extends ChangeNotifier {
     return switch (entry.setting) {
       AppSetting.clickSound => clickSoundEnabled ? '开启' : '关闭',
       AppSetting.playbackQuality => playbackQuality.label,
+      AppSetting.gaplessPlayback => gaplessPlaybackEnabled ? '开启' : '关闭',
+      AppSetting.sleepTimer =>
+        music.sleepTimerDeadline == null
+            ? AppSleepTimer.off.label
+            : sleepTimer.label,
       AppSetting.volumeLimit => volumeLimit.label,
+      AppSetting.customBackground => hasCustomBackground ? '已设置' : '选择图片',
+      AppSetting.clearCustomBackground => hasCustomBackground ? '按下恢复' : '动态背景',
       AppSetting.haptics => hapticsEnabled ? '开启' : '关闭',
       AppSetting.clearCache => '按下清理',
       AppSetting.about => 'v1.0.0',
@@ -149,6 +165,8 @@ class ShellController extends ChangeNotifier {
     PlayerMode.queue => displayAlbum.imageUrl,
   };
 
+  bool get hasCustomBackground => customBackgroundPath?.isNotEmpty == true;
+
   bool get wheelIsPlaying =>
       music.currentSong == null ? isPlayingLocally : music.isPlaying;
 
@@ -162,6 +180,9 @@ class ShellController extends ChangeNotifier {
       return;
     }
     final controllerIsPlaying = music.isPlaying;
+    if (sleepTimer != AppSleepTimer.off && music.sleepTimerDeadline == null) {
+      sleepTimer = AppSleepTimer.off;
+    }
     final playbackChanged = controllerIsPlaying != _lastControllerIsPlaying;
     _lastControllerIsPlaying = controllerIsPlaying;
     if (mode == PlayerMode.feature && !playbackChanged) {
@@ -337,6 +358,12 @@ class ShellController extends ChangeNotifier {
     previousMode = PlayerMode.feature;
     hasLocalSelection = false;
     await switchMode(PlayerMode.player);
+  }
+
+  void openPlayerLyrics() {
+    previousMode = mode;
+    lyricsOpenRevision += 1;
+    unawaited(switchMode(PlayerMode.player));
   }
 
   void openQueue() {
@@ -616,7 +643,18 @@ class ShellController extends ChangeNotifier {
       hapticsEnabled = settings.hapticsEnabled;
       playbackQuality = settings.playbackQuality;
       volumeLimit = settings.volumeLimit;
+      gaplessPlaybackEnabled = settings.gaplessPlaybackEnabled;
+      final savedCustomBackgroundPath = settings.customBackgroundPath;
+      customBackgroundPath =
+          savedCustomBackgroundPath != null &&
+              await _customBackgroundPicker.exists(savedCustomBackgroundPath)
+          ? savedCustomBackgroundPath
+          : null;
+      if (_disposed) {
+        return;
+      }
       music.setPlaybackFileType(playbackQuality.fileType);
+      music.setGaplessPlaybackEnabled(gaplessPlaybackEnabled);
       try {
         await music.setVolumeLimit(volumeLimit.gain);
       } catch (_) {}
@@ -634,8 +672,69 @@ class ShellController extends ChangeNotifier {
           hapticsEnabled: hapticsEnabled,
           playbackQuality: playbackQuality,
           volumeLimit: volumeLimit,
+          gaplessPlaybackEnabled: gaplessPlaybackEnabled,
+          customBackgroundPath: customBackgroundPath,
         ),
       );
+    } catch (_) {}
+  }
+
+  Future<void> _chooseCustomBackground() async {
+    if (!_customBackgroundPicker.isSupported) {
+      _settingFeedback[AppSetting.customBackground] = '当前平台暂不支持从图库选择自定义背景。';
+      notifyListeners();
+      return;
+    }
+    try {
+      final selectedPath = await _customBackgroundPicker.pickImage();
+      if (_disposed) {
+        if (selectedPath != null) {
+          try {
+            await _customBackgroundPicker.deleteImage(selectedPath);
+          } catch (_) {}
+        }
+        return;
+      }
+      if (selectedPath == null) {
+        _settingFeedback[AppSetting.customBackground] = '未选择新的背景图片，当前背景保持不变。';
+        notifyListeners();
+        return;
+      }
+      final previousPath = customBackgroundPath;
+      customBackgroundPath = selectedPath;
+      _settingFeedback[AppSetting.customBackground] = '已应用自定义背景，图片会保存在应用内。';
+      _settingFeedback.remove(AppSetting.clearCustomBackground);
+      notifyListeners();
+      await _saveSettings();
+      if (previousPath != null && previousPath != selectedPath) {
+        try {
+          await _customBackgroundPicker.deleteImage(previousPath);
+        } catch (_) {}
+      }
+    } catch (_) {
+      if (_disposed) {
+        return;
+      }
+      _settingFeedback[AppSetting.customBackground] = '无法选择背景图片，请稍后重试。';
+      notifyListeners();
+    }
+  }
+
+  Future<void> _clearCustomBackground() async {
+    final previousPath = customBackgroundPath;
+    if (previousPath == null) {
+      _settingFeedback[AppSetting.clearCustomBackground] =
+          '当前已使用随页面和歌曲变化的动态背景。';
+      notifyListeners();
+      return;
+    }
+    customBackgroundPath = null;
+    _settingFeedback[AppSetting.clearCustomBackground] = '已恢复随页面和歌曲变化的动态背景。';
+    _settingFeedback.remove(AppSetting.customBackground);
+    notifyListeners();
+    await _saveSettings();
+    try {
+      await _customBackgroundPicker.deleteImage(previousPath);
     } catch (_) {}
   }
 
@@ -658,6 +757,21 @@ class ShellController extends ChangeNotifier {
             '已选择${playbackQuality.label}音质，将从下一首开始；不支持时回退标准。';
         notifyListeners();
         await _saveSettings();
+      case AppSetting.gaplessPlayback:
+        gaplessPlaybackEnabled = !gaplessPlaybackEnabled;
+        music.setGaplessPlaybackEnabled(gaplessPlaybackEnabled);
+        _settingFeedback[setting] = gaplessPlaybackEnabled
+            ? '无缝切换已开启，当前歌曲结束前将与下一首交叉淡入淡出。'
+            : '无缝切换已关闭，将恢复逐首加载。';
+        notifyListeners();
+        await _saveSettings();
+      case AppSetting.sleepTimer:
+        sleepTimer = sleepTimer.next;
+        music.setSleepTimer(sleepTimer.duration);
+        _settingFeedback[setting] = sleepTimer == AppSleepTimer.off
+            ? '定时关闭已取消。'
+            : '将在 ${sleepTimer.label}后自动暂停播放。';
+        notifyListeners();
       case AppSetting.volumeLimit:
         volumeLimit = volumeLimit.next;
         _settingFeedback[setting] = volumeLimit == AppVolumeLimit.off
@@ -671,6 +785,10 @@ class ShellController extends ChangeNotifier {
           _settingFeedback[setting] = '应用音量限制失败，请稍后重试。';
           notifyListeners();
         }
+      case AppSetting.customBackground:
+        await _chooseCustomBackground();
+      case AppSetting.clearCustomBackground:
+        await _clearCustomBackground();
       case AppSetting.haptics:
         hapticsEnabled = !hapticsEnabled;
         _settingFeedback[setting] = hapticsEnabled ? '触感反馈已开启。' : '触感反馈已关闭。';

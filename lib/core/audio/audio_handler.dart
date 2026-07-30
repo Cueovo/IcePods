@@ -8,6 +8,18 @@ import 'package:just_audio/just_audio.dart';
 import 'package:qqmusic_ipod/business/entities/music.dart';
 import 'package:qqmusic_ipod/core/utils/device_display_metrics.dart';
 
+class _CrossfadeSource {
+  const _CrossfadeSource({
+    required this.song,
+    required this.uri,
+    required this.sequenceIndex,
+  });
+
+  final QqMusicItem song;
+  final Uri uri;
+  final int sequenceIndex;
+}
+
 /// Bridges [just_audio] into [audio_service] so iOS can treat this process as
 /// a full Now Playing app (Lock Screen / Control Center / Dynamic Island).
 ///
@@ -26,20 +38,73 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
     MediaAction.skipToPrevious,
   };
 
-  QqMusicAudioHandler({AudioPlayer? audioPlayer})
-    : player = audioPlayer ?? AudioPlayer() {
-    _subscriptions.add(player.playbackEventStream.listen(_broadcastState));
-    _subscriptions.add(
-      player.durationStream.listen((duration) {
-        if (duration != null && duration > Duration.zero) {
-          updateDuration(duration);
-        }
-      }),
+  static const Duration crossfadeDuration = Duration(seconds: 5);
+  static const Duration _crossfadeStep = Duration(milliseconds: 50);
+
+  QqMusicAudioHandler({AudioPlayer? audioPlayer, AudioPlayer? crossfadePlayer})
+    : _primaryPlayer = audioPlayer ?? AudioPlayer(),
+      _secondaryPlayer = crossfadePlayer ?? AudioPlayer(),
+      _ownsPrimaryPlayer = audioPlayer == null,
+      _ownsSecondaryPlayer = crossfadePlayer == null {
+    _activePlayer = _primaryPlayer;
+    _standbyPlayer = _secondaryPlayer;
+    _bindActivePlayer();
+  }
+
+  final AudioPlayer _primaryPlayer;
+  final AudioPlayer _secondaryPlayer;
+  final bool _ownsPrimaryPlayer;
+  final bool _ownsSecondaryPlayer;
+  late AudioPlayer _activePlayer;
+  late AudioPlayer _standbyPlayer;
+  final StreamController<PlayerState> _playerStateController =
+      StreamController<PlayerState>.broadcast();
+  final StreamController<Duration> _positionController =
+      StreamController<Duration>.broadcast();
+  final StreamController<Duration?> _durationController =
+      StreamController<Duration?>.broadcast();
+  final StreamController<PlayerException> _errorController =
+      StreamController<PlayerException>.broadcast();
+  final StreamController<int?> _sequenceIndexController =
+      StreamController<int?>.broadcast();
+  StreamSubscription<PlaybackEvent>? _playbackEventSubscription;
+  StreamSubscription<PlayerState>? _playerStateSubscription;
+  StreamSubscription<Duration>? _positionSubscription;
+  StreamSubscription<Duration?>? _durationSubscription;
+  StreamSubscription<PlayerException>? _errorSubscription;
+  StreamSubscription<int?>? _currentIndexSubscription;
+  Timer? _crossfadeTimer;
+  AudioPlayer? _crossfadeOutgoingPlayer;
+  _CrossfadeSource? _preparedCrossfadeSource;
+  _CrossfadeSource? _pendingCrossfadeSource;
+  DateTime? _crossfadeStartedAt;
+  Duration _runningCrossfadeDuration = Duration.zero;
+  Future<void> _crossfadeVolumeUpdate = Future<void>.value();
+  bool _crossfadeEnabled = false;
+  bool _usingCrossfadeSources = false;
+  bool _crossfadeRunning = false;
+  int _activeSequenceIndex = 0;
+  double _volume = 1;
+
+  AudioPlayer get player => _activePlayer;
+  Stream<PlayerState> get playerStateStream => _playerStateController.stream;
+  Stream<Duration> get positionStream => _positionController.stream;
+  Stream<Duration?> get durationStream => _durationController.stream;
+  Stream<PlayerException> get errorStream => _errorController.stream;
+  Stream<int?> get currentIndexStream => _sequenceIndexController.stream;
+
+  static ({double outgoing, double incoming}) crossfadeGains(
+    double maximumVolume,
+    double progress,
+  ) {
+    final normalized = progress.clamp(0.0, 1.0).toDouble();
+    return (
+      outgoing: maximumVolume * (1 - normalized),
+      incoming: maximumVolume * normalized,
     );
   }
 
-  final AudioPlayer player;
-  final List<StreamSubscription<Object?>> _subscriptions = [];
+  final List<QqMusicItem> _sequenceSongs = [];
 
   QqMusicItem? currentSong;
   Future<void> Function(int direction)? _skipHandler;
@@ -48,22 +113,368 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
     _skipHandler = handler;
   }
 
-  Stream<PlayerState> get playerStateStream => player.playerStateStream;
-  Stream<Duration> get positionStream => player.positionStream;
-  Stream<Duration?> get durationStream => player.durationStream;
   bool get playing => player.playing;
   ProcessingState get processingState => player.processingState;
   Duration? get duration => player.duration;
 
-  Future<void> load(QqMusicItem song, Uri uri) async {
-    await player.setAudioSource(AudioSource.uri(uri));
+  void setCrossfadeEnabled(bool enabled) {
+    if (_crossfadeEnabled == enabled) {
+      return;
+    }
+    _crossfadeEnabled = enabled;
+    if (!enabled && _crossfadeRunning) {
+      unawaited(_cancelCrossfade());
+    }
+  }
+
+  Future<void> setVolume(double volume) async {
+    _volume = volume.clamp(0.0, 1.0).toDouble();
+    if (_crossfadeRunning) {
+      await _queueCrossfadeVolumes(_crossfadeProgress);
+      return;
+    }
+    await _activePlayer.setVolume(_volume);
+  }
+
+  void _bindActivePlayer() {
+    _cancelActivePlayerSubscriptions();
+    _playbackEventSubscription = _activePlayer.playbackEventStream.listen(
+      _broadcastState,
+    );
+    _playerStateSubscription = _activePlayer.playerStateStream.listen(
+      _playerStateController.add,
+    );
+    _positionSubscription = _activePlayer.positionStream.listen((position) {
+      _positionController.add(position);
+      _maybeStartCrossfade(position);
+    });
+    _durationSubscription = _activePlayer.durationStream.listen((duration) {
+      _durationController.add(duration);
+      if (duration != null && duration > Duration.zero) {
+        updateDuration(duration);
+      }
+    });
+    _errorSubscription = _activePlayer.errorStream.listen(_errorController.add);
+    _currentIndexSubscription = _activePlayer.currentIndexStream.listen((
+      index,
+    ) {
+      if (_usingCrossfadeSources) {
+        return;
+      }
+      _activeSequenceIndex = index ?? 0;
+      _selectSequenceIndex(index);
+      _sequenceIndexController.add(index);
+    });
+  }
+
+  void _cancelActivePlayerSubscriptions() {
+    final playback = _playbackEventSubscription;
+    if (playback != null) {
+      unawaited(playback.cancel());
+    }
+    final state = _playerStateSubscription;
+    if (state != null) {
+      unawaited(state.cancel());
+    }
+    final position = _positionSubscription;
+    if (position != null) {
+      unawaited(position.cancel());
+    }
+    final duration = _durationSubscription;
+    if (duration != null) {
+      unawaited(duration.cancel());
+    }
+    final error = _errorSubscription;
+    if (error != null) {
+      unawaited(error.cancel());
+    }
+    final index = _currentIndexSubscription;
+    if (index != null) {
+      unawaited(index.cancel());
+    }
+  }
+
+  Future<void> load(
+    QqMusicItem song,
+    Uri uri, {
+    QqMusicItem? nextSong,
+    Uri? nextUri,
+  }) async {
+    await _cancelCrossfade();
+    _sequenceSongs
+      ..clear()
+      ..add(song);
+    if (nextSong != null && nextUri != null) {
+      _sequenceSongs.add(nextSong);
+    }
+    queue.add(_sequenceSongs.map(_mediaItemFor).toList(growable: false));
+    _activeSequenceIndex = 0;
+    _preparedCrossfadeSource = null;
+    _pendingCrossfadeSource = null;
+    _usingCrossfadeSources = _crossfadeEnabled;
+    await _standbyPlayer.stop();
+    await _standbyPlayer.setVolume(0);
+    await _activePlayer.setVolume(_volume);
+    if (!_usingCrossfadeSources) {
+      final sources = <AudioSource>[AudioSource.uri(uri)];
+      if (nextSong != null && nextUri != null) {
+        sources.add(AudioSource.uri(nextUri));
+      }
+      await _activePlayer.setAudioSources(
+        sources,
+        initialIndex: 0,
+        initialPosition: Duration.zero,
+      );
+      _selectSequenceIndex(0);
+      return;
+    }
+    await _activePlayer.setAudioSource(
+      AudioSource.uri(uri),
+      initialPosition: Duration.zero,
+    );
+    if (nextSong != null && nextUri != null) {
+      await _prepareCrossfadeSource(
+        _CrossfadeSource(song: nextSong, uri: nextUri, sequenceIndex: 1),
+      );
+    }
+    _selectSequenceIndex(0);
+  }
+
+  Future<void> append(QqMusicItem song, Uri uri) async {
+    if (_sequenceSongs.any((item) => _sameSong(item, song))) {
+      return;
+    }
+    final source = _CrossfadeSource(
+      song: song,
+      uri: uri,
+      sequenceIndex: _sequenceSongs.length,
+    );
+    _sequenceSongs.add(song);
+    queue.add(_sequenceSongs.map(_mediaItemFor).toList(growable: false));
+    if (!_usingCrossfadeSources) {
+      await _activePlayer.addAudioSource(AudioSource.uri(uri));
+      return;
+    }
+    if (_crossfadeRunning) {
+      _pendingCrossfadeSource = source;
+      return;
+    }
+    await _prepareCrossfadeSource(source);
+  }
+
+  Future<void> _prepareCrossfadeSource(_CrossfadeSource source) async {
+    _preparedCrossfadeSource = source;
+    try {
+      await _standbyPlayer.stop();
+      await _standbyPlayer.setVolume(0);
+      await _standbyPlayer.setAudioSource(
+        AudioSource.uri(source.uri),
+        initialPosition: Duration.zero,
+      );
+    } catch (_) {
+      if (identical(_preparedCrossfadeSource, source)) {
+        _preparedCrossfadeSource = null;
+      }
+    }
+  }
+
+  void _maybeStartCrossfade(Duration position) {
+    if (!_usingCrossfadeSources ||
+        !_crossfadeEnabled ||
+        _crossfadeRunning ||
+        !_activePlayer.playing) {
+      return;
+    }
+    final source = _preparedCrossfadeSource;
+    if (source == null || source.sequenceIndex != _activeSequenceIndex + 1) {
+      return;
+    }
+    final duration = _activePlayer.duration;
+    if (duration == null || duration <= Duration.zero) {
+      return;
+    }
+    final transitionDuration = _effectiveCrossfadeDuration(duration);
+    if (transitionDuration == Duration.zero ||
+        position < duration - transitionDuration) {
+      return;
+    }
+    unawaited(_startCrossfade(source, transitionDuration));
+  }
+
+  Duration _effectiveCrossfadeDuration(Duration duration) {
+    final milliseconds = duration.inMilliseconds;
+    if (milliseconds < const Duration(seconds: 2).inMilliseconds) {
+      return Duration.zero;
+    }
+    final half = Duration(milliseconds: milliseconds ~/ 2);
+    return half < crossfadeDuration ? half : crossfadeDuration;
+  }
+
+  Future<void> _startCrossfade(
+    _CrossfadeSource source,
+    Duration transitionDuration,
+  ) async {
+    if (!_usingCrossfadeSources ||
+        !_crossfadeEnabled ||
+        _crossfadeRunning ||
+        !identical(_preparedCrossfadeSource, source)) {
+      return;
+    }
+    final outgoing = _activePlayer;
+    final incoming = _standbyPlayer;
+    _crossfadeRunning = true;
+    _crossfadeOutgoingPlayer = outgoing;
+    _preparedCrossfadeSource = null;
+    _runningCrossfadeDuration = transitionDuration;
+    _crossfadeStartedAt = DateTime.now();
+    try {
+      await incoming.setVolume(0);
+      unawaited(incoming.play().catchError((Object _) {}));
+      _activePlayer = incoming;
+      _standbyPlayer = outgoing;
+      _activeSequenceIndex = source.sequenceIndex;
+      _bindActivePlayer();
+      _selectSequenceIndex(source.sequenceIndex);
+      _sequenceIndexController.add(source.sequenceIndex);
+      _crossfadeTimer = Timer.periodic(_crossfadeStep, _handleCrossfadeTick);
+      unawaited(_queueCrossfadeVolumes(0));
+    } catch (_) {
+      _crossfadeRunning = false;
+      _crossfadeOutgoingPlayer = null;
+      _crossfadeStartedAt = null;
+      _runningCrossfadeDuration = Duration.zero;
+      _activePlayer = outgoing;
+      _standbyPlayer = incoming;
+      _bindActivePlayer();
+      try {
+        await outgoing.setVolume(_volume);
+        await incoming.pause();
+        await incoming.setVolume(0);
+      } catch (_) {}
+    }
+  }
+
+  double get _crossfadeProgress {
+    final startedAt = _crossfadeStartedAt;
+    if (startedAt == null || _runningCrossfadeDuration <= Duration.zero) {
+      return 1;
+    }
+    final elapsed = DateTime.now().difference(startedAt);
+    return (elapsed.inMicroseconds / _runningCrossfadeDuration.inMicroseconds)
+        .clamp(0.0, 1.0)
+        .toDouble();
+  }
+
+  void _handleCrossfadeTick(Timer timer) {
+    if (!_crossfadeRunning) {
+      timer.cancel();
+      return;
+    }
+    final progress = _crossfadeProgress;
+    unawaited(_queueCrossfadeVolumes(progress));
+    if (progress >= 1) {
+      timer.cancel();
+      _crossfadeTimer = null;
+      unawaited(_finishCrossfade());
+    }
+  }
+
+  Future<void> _queueCrossfadeVolumes(double progress) {
+    final outgoing = _crossfadeOutgoingPlayer;
+    final incoming = _activePlayer;
+    if (outgoing == null) {
+      return Future<void>.value();
+    }
+    final gains = crossfadeGains(_volume, progress);
+    _crossfadeVolumeUpdate = _crossfadeVolumeUpdate.then((_) async {
+      if (!_crossfadeRunning ||
+          !identical(_crossfadeOutgoingPlayer, outgoing) ||
+          !identical(_activePlayer, incoming)) {
+        return;
+      }
+      try {
+        await Future.wait([
+          outgoing.setVolume(gains.outgoing),
+          incoming.setVolume(gains.incoming),
+        ]);
+      } catch (_) {}
+    });
+    return _crossfadeVolumeUpdate;
+  }
+
+  Future<void> _finishCrossfade() async {
+    if (!_crossfadeRunning) {
+      return;
+    }
+    _crossfadeTimer?.cancel();
+    _crossfadeTimer = null;
+    await _queueCrossfadeVolumes(1);
+    await _crossfadeVolumeUpdate;
+    final outgoing = _crossfadeOutgoingPlayer;
+    _crossfadeRunning = false;
+    _crossfadeOutgoingPlayer = null;
+    _crossfadeStartedAt = null;
+    _runningCrossfadeDuration = Duration.zero;
+    if (outgoing != null) {
+      try {
+        await outgoing.pause();
+        await outgoing.seek(Duration.zero);
+        await outgoing.setVolume(0);
+      } catch (_) {}
+    }
+    try {
+      await _activePlayer.setVolume(_volume);
+    } catch (_) {}
+    final pending = _pendingCrossfadeSource;
+    _pendingCrossfadeSource = null;
+    if (pending != null && _usingCrossfadeSources) {
+      await _prepareCrossfadeSource(pending);
+    }
+  }
+
+  Future<void> _cancelCrossfade() async {
+    _crossfadeTimer?.cancel();
+    _crossfadeTimer = null;
+    final outgoing = _crossfadeOutgoingPlayer;
+    _crossfadeRunning = false;
+    _crossfadeOutgoingPlayer = null;
+    _crossfadeStartedAt = null;
+    _runningCrossfadeDuration = Duration.zero;
+    _pendingCrossfadeSource = null;
+    if (outgoing != null && !identical(outgoing, _activePlayer)) {
+      try {
+        await outgoing.pause();
+        await outgoing.setVolume(0);
+      } catch (_) {}
+    }
+    try {
+      await _activePlayer.setVolume(_volume);
+    } catch (_) {}
+  }
+
+  void _selectSequenceIndex(int? index) {
+    if (index == null || index < 0 || index >= _sequenceSongs.length) {
+      return;
+    }
+    final song = _sequenceSongs[index];
+    if (_sameSong(song, currentSong) && mediaItem.value != null) {
+      return;
+    }
     currentSong = song;
-    // Prefer the duration the player resolved from the stream (home-feed
-    // cards often omit interval / length metadata).
     final resolvedDuration =
         player.duration ??
         (song.duration > Duration.zero ? song.duration : null);
     mediaItem.add(_mediaItemFor(song, durationOverride: resolvedDuration));
+  }
+
+  bool _sameSong(QqMusicItem left, QqMusicItem? right) {
+    if (right == null) {
+      return false;
+    }
+    if (left.mid.isNotEmpty && right.mid.isNotEmpty) {
+      return left.mid == right.mid;
+    }
+    return left.id == right.id;
   }
 
   /// Push a known duration onto the current [MediaItem] (e.g. after the
@@ -101,11 +512,15 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
   @override
   Future<void> pause() async {
     _broadcastOptimisticState(false);
+    await _cancelCrossfade();
     await player.pause();
   }
 
   @override
-  Future<void> seek(Duration position) => player.seek(position);
+  Future<void> seek(Duration position) async {
+    await _cancelCrossfade();
+    await player.seek(position);
+  }
 
   @override
   Future<void> click([MediaButton button = MediaButton.media]) async {
@@ -141,7 +556,13 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
 
   @override
   Future<void> stop() async {
-    await player.stop();
+    await _cancelCrossfade();
+    await Future.wait([_activePlayer.stop(), _standbyPlayer.stop()]);
+    _usingCrossfadeSources = false;
+    _preparedCrossfadeSource = null;
+    _pendingCrossfadeSource = null;
+    _sequenceSongs.clear();
+    queue.add(const []);
     currentSong = null;
     mediaItem.add(null);
     playbackState.add(
@@ -232,12 +653,30 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
       updatePosition: player.position,
       bufferedPosition: player.bufferedPosition,
       speed: isPlaying ? player.speed : 0.0,
-      queueIndex: event.currentIndex,
+      queueIndex: _usingCrossfadeSources
+          ? _activeSequenceIndex
+          : event.currentIndex,
     );
   }
 
   void _broadcastState(PlaybackEvent event) {
     playbackState.add(_stateFor(event));
+  }
+
+  Future<void> close() async {
+    await stop();
+    _cancelActivePlayerSubscriptions();
+    if (_ownsPrimaryPlayer) {
+      await _primaryPlayer.dispose();
+    }
+    if (_ownsSecondaryPlayer) {
+      await _secondaryPlayer.dispose();
+    }
+    await _playerStateController.close();
+    await _positionController.close();
+    await _durationController.close();
+    await _errorController.close();
+    await _sequenceIndexController.close();
   }
 
   MediaItem _mediaItemFor(QqMusicItem song, {Duration? durationOverride}) {
@@ -250,8 +689,7 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
         durationOverride ??
         (song.duration == Duration.zero ? null : song.duration);
     final title = song.title.trim().isEmpty ? '未知歌曲' : song.title.trim();
-    final artist =
-        song.subtitle.trim().isEmpty ? '未知艺人' : song.subtitle.trim();
+    final artist = song.subtitle.trim().isEmpty ? '未知艺人' : song.subtitle.trim();
     return MediaItem(
       id: song.mid.isEmpty ? song.id : song.mid,
       album: 'QQ 音乐',

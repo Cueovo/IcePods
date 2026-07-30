@@ -27,6 +27,7 @@ class NowPlayingPanel extends StatefulWidget {
     this.isLiked = false,
     this.playbackMode = QqMusicPlaybackMode.sequential,
     this.queueLength = 0,
+    this.lyricsOpenRevision = 0,
     this.onLikedPressed,
     this.onLyricsPressed,
     this.onPlaybackModePressed,
@@ -50,6 +51,7 @@ class NowPlayingPanel extends StatefulWidget {
   final bool isLiked;
   final QqMusicPlaybackMode playbackMode;
   final int queueLength;
+  final int lyricsOpenRevision;
   final VoidCallback? onLikedPressed;
   final VoidCallback? onLyricsPressed;
   final VoidCallback? onPlaybackModePressed;
@@ -60,9 +62,27 @@ class NowPlayingPanel extends StatefulWidget {
 }
 
 class _NowPlayingPanelState extends State<NowPlayingPanel> {
-  bool _showLyrics = false;
+  late bool _showLyrics;
   double _horizontalDrag = 0;
   int _contentDirection = 1;
+
+  @override
+  void initState() {
+    super.initState();
+    _showLyrics = widget.lyricsOpenRevision > 0;
+  }
+
+  @override
+  void didUpdateWidget(NowPlayingPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.lyricsOpenRevision != widget.lyricsOpenRevision &&
+        !_showLyrics) {
+      setState(() {
+        _contentDirection = 1;
+        _showLyrics = true;
+      });
+    }
+  }
 
   void _toggleLyrics({int? direction}) {
     setState(() {

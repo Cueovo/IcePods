@@ -7,9 +7,14 @@ import 'package:web/web.dart' as web;
 import 'package:qqmusic_ipod/core/theme/widgets/artwork_image.dart';
 
 class AmbientBackground extends StatelessWidget {
-  const AmbientBackground({required this.imageUrl, super.key});
+  const AmbientBackground({
+    required this.imageUrl,
+    this.customImagePath,
+    super.key,
+  });
 
   final String imageUrl;
+  final String? customImagePath;
 
   @override
   Widget build(BuildContext context) {

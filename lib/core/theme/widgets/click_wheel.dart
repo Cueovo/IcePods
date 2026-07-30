@@ -29,7 +29,7 @@ class ClickWheel extends StatefulWidget {
 }
 
 class _ClickWheelState extends State<ClickWheel> {
-  static const double _size = 280;
+  static const double _size = 300;
   static const double _center = _size / 2;
   static const double _centerRadius = 50;
   static const double _ringHitMin = 52;

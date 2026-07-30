@@ -17,7 +17,9 @@ class QqMusicLoginModule {
     QqMusicCredentialStore? credentialStore,
     DateTime Function()? now,
     Random? random,
-  }) : _httpClient = httpClient ?? http.Client(),
+    this.credentialRefreshInterval = const Duration(hours: 24),
+  }) : assert(credentialRefreshInterval > Duration.zero),
+       _httpClient = httpClient ?? http.Client(),
        _ownsHttpClient = httpClient == null,
        _credentialStore =
            credentialStore ?? const SecureQqMusicCredentialStore(),
@@ -25,6 +27,8 @@ class QqMusicLoginModule {
        _random = random ?? Random.secure();
 
   static const _androidUserAgent = 'QQMusic 14090008(android 10)';
+
+  final Duration credentialRefreshInterval;
 
   static const _loginErrorCodes = <int>{
     1000,
@@ -49,6 +53,9 @@ class QqMusicLoginModule {
   final Random _random;
 
   QqMusicCredential? _credential;
+  Timer? _credentialRefreshTimer;
+  bool _scheduledRefreshRunning = false;
+  bool _closed = false;
 
   QqMusicCredential? get credential => _credential;
 
@@ -56,6 +63,7 @@ class QqMusicLoginModule {
 
   void useCredential(QqMusicCredential credential) {
     _credential = credential;
+    _scheduleCredentialRefresh();
   }
 
   Future<void> restoreSession() async {
@@ -65,7 +73,8 @@ class QqMusicLoginModule {
     }
     _credential = restored;
     try {
-      if (await checkExpired(restored)) {
+      if (_credentialRefreshDelay(restored) == Duration.zero ||
+          await checkExpired(restored)) {
         await refreshCredential(restored);
       }
     } on QqMusicDirectException catch (error) {
@@ -76,6 +85,10 @@ class QqMusicLoginModule {
         await refreshCredential(restored);
       } catch (_) {
         await logout();
+      }
+    } finally {
+      if (isLoggedIn) {
+        _scheduleCredentialRefresh();
       }
     }
   }
@@ -150,6 +163,8 @@ class QqMusicLoginModule {
   }
 
   Future<void> logout() async {
+    _credentialRefreshTimer?.cancel();
+    _credentialRefreshTimer = null;
     final active = _credential;
     try {
       if (active?.isValid ?? false) {
@@ -573,6 +588,56 @@ class QqMusicLoginModule {
   Future<void> _saveCredential(QqMusicCredential credential) async {
     _credential = credential;
     await _credentialStore.write(credential);
+    _scheduleCredentialRefresh(delay: credentialRefreshInterval);
+  }
+
+  void _scheduleCredentialRefresh({Duration? delay}) {
+    _credentialRefreshTimer?.cancel();
+    _credentialRefreshTimer = null;
+    final active = _credential;
+    if (_closed || active == null || !active.isValid) {
+      return;
+    }
+    _credentialRefreshTimer = Timer(
+      delay ?? _credentialRefreshDelay(active),
+      () => unawaited(_refreshCredentialOnSchedule()),
+    );
+  }
+
+  Duration _credentialRefreshDelay(QqMusicCredential credential) {
+    final createdAt = credential.musicKeyCreatedAt;
+    if (createdAt <= 0) {
+      return credentialRefreshInterval;
+    }
+    final createdAtMilliseconds = createdAt < 100000000000
+        ? createdAt * 1000
+        : createdAt;
+    final elapsedMilliseconds =
+        _now().millisecondsSinceEpoch - createdAtMilliseconds;
+    if (elapsedMilliseconds <= 0) {
+      return credentialRefreshInterval;
+    }
+    final remaining =
+        credentialRefreshInterval - Duration(milliseconds: elapsedMilliseconds);
+    return remaining > Duration.zero ? remaining : Duration.zero;
+  }
+
+  Future<void> _refreshCredentialOnSchedule() async {
+    if (_scheduledRefreshRunning || _closed) {
+      return;
+    }
+    final active = _credential;
+    if (active == null || !active.isValid) {
+      return;
+    }
+    _scheduledRefreshRunning = true;
+    try {
+      await refreshCredential(active);
+    } catch (_) {
+      _scheduleCredentialRefresh(delay: credentialRefreshInterval);
+    } finally {
+      _scheduledRefreshRunning = false;
+    }
   }
 
   QqMusicCredential _requireCredential(QqMusicCredential? target) {
@@ -679,6 +744,9 @@ class QqMusicLoginModule {
   };
 
   void close() {
+    _closed = true;
+    _credentialRefreshTimer?.cancel();
+    _credentialRefreshTimer = null;
     if (_ownsHttpClient) {
       _httpClient.close();
     }

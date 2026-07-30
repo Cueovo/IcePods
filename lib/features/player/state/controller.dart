@@ -40,6 +40,13 @@ class _PrefetchedPlayableUrl {
   final DateTime createdAt;
 }
 
+class _GaplessSource {
+  const _GaplessSource({required this.song, required this.uri});
+
+  final QqMusicItem song;
+  final Uri uri;
+}
+
 class QqMusicController extends ChangeNotifier {
   QqMusicController({
     required this.api,
@@ -48,6 +55,7 @@ class QqMusicController extends ChangeNotifier {
     Future<bool> Function(Uri uri)? externalUrlLauncher,
     Future<void> Function(QqMusicItem song, Uri uri)? audioSourceLoader,
     Future<void> Function()? audioPlaybackStarter,
+    Future<void> Function()? audioPlaybackPauser,
     Future<void> Function(Duration position)? audioSeeker,
     Future<void> Function()? audioSessionConfigurator,
     Future<String> Function()? audioOutputNameLoader,
@@ -58,7 +66,8 @@ class QqMusicController extends ChangeNotifier {
     DateTime Function()? clock,
     QqMusicPlaybackStateStore? playbackStateStore,
     this.prefetchedPlayableUrlMaxAge = const Duration(minutes: 5),
-  }) : _clock = clock ?? DateTime.now,
+  }) : _usesDefaultAudioSourceLoader = audioSourceLoader == null,
+       _clock = clock ?? DateTime.now,
        _audioHandler = audioHandler,
        _audioPlayer = audioPlayer ?? audioHandler?.player ?? AudioPlayer(),
        _ownsAudioPlayer = audioPlayer == null && audioHandler == null,
@@ -81,6 +90,8 @@ class QqMusicController extends ChangeNotifier {
         };
     _audioPlaybackStarter =
         audioPlaybackStarter ?? _audioHandler?.play ?? _audioPlayer.play;
+    _audioPlaybackPauser =
+        audioPlaybackPauser ?? _audioHandler?.pause ?? _audioPlayer.pause;
     _audioSeeker =
         audioSeeker ??
         (position) async {
@@ -96,64 +107,79 @@ class QqMusicController extends ChangeNotifier {
     _audioOutputNameLoader =
         audioOutputNameLoader ?? const AudioOutputService().currentOutputName;
     _subscriptions.add(
-      (playerStateStream ?? _audioPlayer.playerStateStream).listen((state) {
-        if (state.playing || state.processingState != ProcessingState.idle) {
-          _playbackRequested = state.playing;
-        }
-        final previousIsPlaying = _isPlaying;
-        final previousIsBuffering = _isBuffering;
-        final previousProcessingState = _lastProcessingState;
-        _lastProcessingState = state.processingState;
-        final isTerminal =
-            state.processingState == ProcessingState.idle ||
-            state.processingState == ProcessingState.completed;
-        _isPlaying = state.playing && !isTerminal;
-        _isBuffering =
-            state.processingState == ProcessingState.loading ||
-            state.processingState == ProcessingState.buffering;
-        if (state.processingState == ProcessingState.completed &&
-            previousProcessingState != ProcessingState.completed) {
-          unawaited(_handlePlaybackCompleted());
-        }
-        if (_isPlaying != previousIsPlaying ||
-            _isBuffering != previousIsBuffering) {
-          notifyListeners();
-        }
-        if (previousIsPlaying && !_isPlaying) {
-          _schedulePlaybackStateSave(immediate: true);
-        }
-      }),
+      (_audioHandler?.currentIndexStream ?? _audioPlayer.currentIndexStream)
+          .listen(_handleSequenceIndexChanged),
     );
     _subscriptions.add(
-      (positionStream ?? _audioPlayer.positionStream).listen((position) {
-        _position = position;
-        _publishPlaybackProgress();
-        _schedulePlaybackStateSave();
-      }),
+      (playerStateStream ??
+              _audioHandler?.playerStateStream ??
+              _audioPlayer.playerStateStream)
+          .listen((state) {
+            if (state.playing ||
+                state.processingState != ProcessingState.idle) {
+              _playbackRequested = state.playing;
+            }
+            final previousIsPlaying = _isPlaying;
+            final previousIsBuffering = _isBuffering;
+            final previousProcessingState = _lastProcessingState;
+            _lastProcessingState = state.processingState;
+            final isTerminal =
+                state.processingState == ProcessingState.idle ||
+                state.processingState == ProcessingState.completed;
+            _isPlaying = state.playing && !isTerminal;
+            _isBuffering =
+                state.processingState == ProcessingState.loading ||
+                state.processingState == ProcessingState.buffering;
+            if (state.processingState == ProcessingState.completed &&
+                previousProcessingState != ProcessingState.completed) {
+              unawaited(_handlePlaybackCompleted());
+            }
+            if (_isPlaying != previousIsPlaying ||
+                _isBuffering != previousIsBuffering) {
+              notifyListeners();
+            }
+            if (previousIsPlaying && !_isPlaying) {
+              _schedulePlaybackStateSave(immediate: true);
+            }
+          }),
     );
     _subscriptions.add(
-      (durationStream ?? _audioPlayer.durationStream).listen((duration) {
-        // Prefer the live player duration — home-feed songs often ship with
-        // duration=0 in the card payload.
-        final resolved = (duration != null && duration > Duration.zero)
-            ? duration
-            : (_audioPlayer.duration != null &&
-                  _audioPlayer.duration! > Duration.zero)
-            ? _audioPlayer.duration!
-            : (_currentSong?.duration ?? Duration.zero);
-        if (resolved > Duration.zero) {
-          _duration = resolved;
-          _audioHandler?.updateDuration(resolved);
-        } else if (_duration <= Duration.zero) {
-          _duration = Duration.zero;
-        }
-        _publishPlaybackProgress();
-      }),
+      (positionStream ??
+              _audioHandler?.positionStream ??
+              _audioPlayer.positionStream)
+          .listen((position) {
+            _position = position;
+            _publishPlaybackProgress();
+            _schedulePlaybackStateSave();
+          }),
     );
     _subscriptions.add(
-      (playerErrorStream ?? _audioPlayer.errorStream).listen(
-        _handlePlayerError,
-      ),
+      (durationStream ??
+              _audioHandler?.durationStream ??
+              _audioPlayer.durationStream)
+          .listen((duration) {
+            // Prefer the live player duration — home-feed songs often ship with
+            // duration=0 in the card payload.
+            final resolved = (duration != null && duration > Duration.zero)
+                ? duration
+                : (_audioPlayer.duration != null &&
+                      _audioPlayer.duration! > Duration.zero)
+                ? _audioPlayer.duration!
+                : (_currentSong?.duration ?? Duration.zero);
+            if (resolved > Duration.zero) {
+              _duration = resolved;
+              _audioHandler?.updateDuration(resolved);
+            } else if (_duration <= Duration.zero) {
+              _duration = Duration.zero;
+            }
+            _publishPlaybackProgress();
+          }),
+    );
+    _subscriptions.add(
+      (playerErrorStream ??
+              _audioHandler?.errorStream ??
+              _audioPlayer.errorStream)
+          .listen(_handlePlayerError),
     );
   }
 
@@ -163,11 +189,13 @@ class QqMusicController extends ChangeNotifier {
   final QqMusicAudioHandler? _audioHandler;
   final AudioPlayer _audioPlayer;
   final bool _ownsAudioPlayer;
+  final bool _usesDefaultAudioSourceLoader;
   final QqMusicPlaybackStateStore _playbackStateStore;
   final Future<bool> Function(Uri uri) _externalUrlLauncher;
   late final Future<void> Function(QqMusicItem song, Uri uri)
   _audioSourceLoader;
   late final Future<void> Function() _audioPlaybackStarter;
+  late final Future<void> Function() _audioPlaybackPauser;
   late final Future<void> Function(Duration position) _audioSeeker;
   late final Future<void> Function() _audioSessionConfigurator;
   late final Future<String> Function() _audioOutputNameLoader;
@@ -175,6 +203,7 @@ class QqMusicController extends ChangeNotifier {
   Timer? _statusClearTimer;
   Timer? _playbackErrorClearTimer;
   Timer? _playbackStateSaveTimer;
+  Timer? _sleepTimer;
   Future<void> _playbackStateWrite = Future<void>.value();
   static const _statusMessageTtl = Duration(seconds: 2);
   static const _playbackErrorTtl = Duration(seconds: 4);
@@ -192,6 +221,7 @@ class QqMusicController extends ChangeNotifier {
   final Map<String, bool> _likedStatusCache = {};
   final Set<String> _unavailableSongKeys = {};
   List<QqMusicItem> _playbackQueue = const [];
+  final List<QqMusicItem> _loadedAudioSequence = [];
   final Set<String> _favoritePlaylistIds = {};
   final Set<String> _unfavoritePlaylistIds = {};
   final Set<String> _dislikedItemIds = {};
@@ -200,6 +230,7 @@ class QqMusicController extends ChangeNotifier {
   Timer? _qrPollTimer;
   bool _pollingQr = false;
   bool _loadingMore = false;
+  Completer<void>? _loadingMoreCompleter;
   bool _handlingPlaybackCompletion = false;
   bool _switchingTrack = false;
   bool _radarPlayPending = false;
@@ -208,6 +239,9 @@ class QqMusicController extends ChangeNotifier {
   bool _restoringPlaybackState = false;
   bool _audioSourceReady = false;
   bool _playbackRequested = false;
+  bool _gaplessPlaybackEnabled = false;
+  bool _sequenceTransitionsArmed = false;
+  DateTime? _sleepTimerDeadline;
   ProcessingState _lastProcessingState = ProcessingState.idle;
   bool _isLoading = false;
   bool _isPlaying = false;
@@ -300,6 +334,36 @@ class QqMusicController extends ChangeNotifier {
   double get progress => playbackProgress.value.value;
   int get playbackFileType => _playbackFileType;
   double get volumeLimit => _volumeLimit;
+  bool get gaplessPlaybackEnabled => _gaplessPlaybackEnabled;
+  DateTime? get sleepTimerDeadline => _sleepTimerDeadline;
+
+  void setGaplessPlaybackEnabled(bool enabled) {
+    if (_gaplessPlaybackEnabled == enabled) {
+      return;
+    }
+    _gaplessPlaybackEnabled = enabled;
+    _audioHandler?.setCrossfadeEnabled(enabled);
+    notifyListeners();
+  }
+
+  void setSleepTimer(Duration? duration) {
+    _sleepTimer?.cancel();
+    _sleepTimer = null;
+    _sleepTimerDeadline = duration == null ? null : _clock().add(duration);
+    if (duration != null) {
+      _sleepTimer = Timer(duration, () => unawaited(_expireSleepTimer()));
+    }
+    notifyListeners();
+  }
+
+  Future<void> _expireSleepTimer() async {
+    _sleepTimer = null;
+    _sleepTimerDeadline = null;
+    _playbackRequested = false;
+    await _audioPlaybackPauser();
+    _setStatusMessage('定时关闭已暂停播放');
+    notifyListeners();
+  }
 
   void setPlaybackFileType(int fileType) {
     if (_playbackFileType == fileType) {
@@ -315,6 +379,11 @@ class QqMusicController extends ChangeNotifier {
       return;
     }
     _volumeLimit = next;
+    final handler = _audioHandler;
+    if (handler != null) {
+      await handler.setVolume(next);
+      return;
+    }
     await _audioPlayer.setVolume(next);
   }
 
@@ -769,16 +838,18 @@ class QqMusicController extends ChangeNotifier {
         continue;
       }
 
+      final queue = List<QqMusicItem>.unmodifiable(
+        items.where((item) => item.isSong),
+      );
       if (isCurrentSong(song)) {
+        _playbackQueue = queue;
+        _schedulePlaybackStateSave(immediate: true);
         if (!isPlaying) {
           await _startPlayback();
         }
         return true;
       }
 
-      final queue = List<QqMusicItem>.unmodifiable(
-        items.where((item) => item.isSong),
-      );
       if (await play(song, queue: queue)) {
         return true;
       }
@@ -815,7 +886,12 @@ class QqMusicController extends ChangeNotifier {
 
   Future<bool> _loadMoreIfPossible() async {
     final before = items.length;
-    await _maybeLoadMore(forceNearEnd: true);
+    final pending = _loadingMoreCompleter;
+    if (_loadingMore && pending != null) {
+      await pending.future;
+    } else {
+      await _maybeLoadMore(forceNearEnd: true);
+    }
     return items.length > before;
   }
 
@@ -1050,6 +1126,8 @@ class QqMusicController extends ChangeNotifier {
         ? (_featurePages[feature] ?? 1) + 1
         : (_childrenPages[containerKey] ?? 1) + 1;
     _loadingMore = true;
+    final loadingCompleter = Completer<void>();
+    _loadingMoreCompleter = loadingCompleter;
     try {
       final loaded = container == null
           ? await api.loadFeature(feature!, page: nextPage)
@@ -1102,6 +1180,12 @@ class QqMusicController extends ChangeNotifier {
       notifyListeners();
     } finally {
       _loadingMore = false;
+      if (!loadingCompleter.isCompleted) {
+        loadingCompleter.complete();
+      }
+      if (identical(_loadingMoreCompleter, loadingCompleter)) {
+        _loadingMoreCompleter = null;
+      }
     }
   }
 
@@ -1266,6 +1350,16 @@ class QqMusicController extends ChangeNotifier {
       notifyListeners();
       return false;
     }
+    final effectiveQueue = preservePlaybackQueue
+        ? _playbackQueue
+        : queue != null && queue.isNotEmpty
+        ? List<QqMusicItem>.unmodifiable(queue)
+        : (() {
+            final sourceSongs = items.where((item) => item.isSong).toList();
+            return sourceSongs.any((item) => _sameSong(item, song))
+                ? List<QqMusicItem>.unmodifiable(sourceSongs)
+                : List<QqMusicItem>.unmodifiable([song]);
+          })();
     _clearPlaybackError();
     _isLoading = true;
     notifyListeners();
@@ -1276,25 +1370,21 @@ class QqMusicController extends ChangeNotifier {
         throw QqMusicApiException(_unavailableSongMessage(song), code: 104003);
       }
       final url = prefetchedUrl ?? await _getPlayableUrl(song);
+      final nextSource = await _resolveGaplessSource(song, effectiveQueue);
       _unavailableSongKeys.remove(_songKey(song));
       await _audioSessionConfigurator();
       _audioSourceReady = false;
-      await _loadAudioSourceWithRetry(song, url);
+      _sequenceTransitionsArmed = false;
+      await _loadAudioSourceWithRetry(song, url, nextSource: nextSource);
       _audioSourceReady = true;
       _currentSong = song;
       _prepareCurrentSongLikedStatus(song);
       unawaited(_loadLyrics(song));
       unawaited(_loadAudioOutputName());
       if (!preservePlaybackQueue) {
-        if (queue != null && queue.isNotEmpty) {
-          _playbackQueue = List.unmodifiable(queue);
-        } else {
-          final sourceSongs = items.where((item) => item.isSong).toList();
-          _playbackQueue = sourceSongs.any((item) => _sameSong(item, song))
-              ? List.unmodifiable(sourceSongs)
-              : List.unmodifiable([song]);
-        }
+        _playbackQueue = effectiveQueue;
       }
+      _sequenceTransitionsArmed = true;
       // Never clobber a good player-reported duration with a zero metadata field
       // (home feed cards often omit interval).
       final playerDuration = _audioHandler?.duration ?? _audioPlayer.duration;
@@ -1361,6 +1451,9 @@ class QqMusicController extends ChangeNotifier {
   }
 
   void clearRemotePlayback() {
+    _sleepTimer?.cancel();
+    _sleepTimer = null;
+    _sleepTimerDeadline = null;
     final handler = _audioHandler;
     unawaited(handler?.stop() ?? _audioPlayer.stop());
     _currentSong = null;
@@ -1392,7 +1485,7 @@ class QqMusicController extends ChangeNotifier {
     }
     _switchingTrack = true;
     try {
-      final activeItems = _playbackQueue.isNotEmpty
+      var activeItems = _playbackQueue.isNotEmpty
           ? _playbackQueue
           : items.where((item) => item.isSong).toList();
       if (activeItems.isEmpty) {
@@ -1414,6 +1507,17 @@ class QqMusicController extends ChangeNotifier {
           direction,
         );
         if (next == null) {
+          if (direction > 0 &&
+              _entry?.feature == QqMusicFeature.radar &&
+              await _loadMoreIfPossible()) {
+            activeItems = _playbackQueue.isNotEmpty
+                ? _playbackQueue
+                : items.where((item) => item.isSong).toList();
+            currentIndex = activeItems.indexWhere(
+              (item) => _sameSong(item, _currentSong),
+            );
+            continue;
+          }
           return;
         }
         final nextSong = activeItems[next];
@@ -1475,6 +1579,9 @@ class QqMusicController extends ChangeNotifier {
         continue;
       }
       final candidate = _playbackQueue[index];
+      if (_loadedAudioSequence.any((item) => _sameSong(item, candidate))) {
+        continue;
+      }
       final key = _songKey(candidate);
       final existing = _prefetchedPlayableUrls[key];
       if (existing != null && _isPrefetchedPlayableUrlFresh(existing)) {
@@ -1500,21 +1607,161 @@ class QqMusicController extends ChangeNotifier {
     return entry.future;
   }
 
+  Future<_GaplessSource?> _resolveGaplessSource(
+    QqMusicItem song,
+    List<QqMusicItem> queue,
+  ) async {
+    if (!_gaplessPlaybackEnabled ||
+        _playbackMode != QqMusicPlaybackMode.sequential ||
+        !_usesDefaultAudioSourceLoader) {
+      return null;
+    }
+    final currentIndex = queue.indexWhere((item) => _sameSong(item, song));
+    if (currentIndex < 0) {
+      return null;
+    }
+    final nextIndex = _adjacentPlayableIndex(queue, currentIndex, 1);
+    if (nextIndex == null) {
+      return null;
+    }
+    final nextSong = queue[nextIndex];
+    final uri =
+        await _takePrefetchedPlayableUrl(nextSong) ??
+        await _tryGetPlayableUrl(nextSong);
+    return uri == null ? null : _GaplessSource(song: nextSong, uri: uri);
+  }
+
+  Future<void> _loadResolvedAudioSources(
+    QqMusicItem song,
+    Uri uri, {
+    _GaplessSource? nextSource,
+  }) async {
+    _loadedAudioSequence
+      ..clear()
+      ..add(song);
+    if (nextSource != null) {
+      _loadedAudioSequence.add(nextSource.song);
+    }
+    if (!_usesDefaultAudioSourceLoader) {
+      await _audioSourceLoader(song, uri);
+      return;
+    }
+    final handler = _audioHandler;
+    if (handler != null) {
+      await handler.load(
+        song,
+        uri,
+        nextSong: nextSource?.song,
+        nextUri: nextSource?.uri,
+      );
+      return;
+    }
+    final sources = <AudioSource>[AudioSource.uri(uri)];
+    if (nextSource != null) {
+      sources.add(AudioSource.uri(nextSource.uri));
+    }
+    await _audioPlayer.setAudioSources(
+      sources,
+      initialIndex: 0,
+      initialPosition: Duration.zero,
+    );
+  }
+
+  void _handleSequenceIndexChanged(int? index) {
+    if (!_sequenceTransitionsArmed ||
+        index == null ||
+        index <= 0 ||
+        index >= _loadedAudioSequence.length) {
+      return;
+    }
+    final song = _loadedAudioSequence[index];
+    if (_sameSong(song, _currentSong)) {
+      return;
+    }
+    _currentSong = song;
+    _audioSourceReady = true;
+    _clearPlaybackError();
+    _prepareCurrentSongLikedStatus(song);
+    unawaited(_loadLyrics(song));
+    unawaited(_loadAudioOutputName());
+    _duration = song.duration;
+    _position = Duration.zero;
+    _publishPlaybackProgress();
+    final visibleIndex = items.indexWhere((item) => _sameSong(item, song));
+    if (visibleIndex >= 0) {
+      _selectedIndex = visibleIndex;
+    }
+    _prefetchAdjacentPlayableUrls(song);
+    _schedulePlaybackStateSave(immediate: true);
+    notifyListeners();
+    unawaited(_appendGaplessSuccessor(song));
+  }
+
+  Future<void> _appendGaplessSuccessor(QqMusicItem song) async {
+    if (!_gaplessPlaybackEnabled ||
+        _playbackMode != QqMusicPlaybackMode.sequential ||
+        !_usesDefaultAudioSourceLoader) {
+      return;
+    }
+    var currentIndex = _playbackQueue.indexWhere(
+      (item) => _sameSong(item, song),
+    );
+    if (currentIndex < 0) {
+      return;
+    }
+    var nextIndex = _adjacentPlayableIndex(_playbackQueue, currentIndex, 1);
+    if (nextIndex == null &&
+        _entry?.feature == QqMusicFeature.radar &&
+        await _loadMoreIfPossible()) {
+      currentIndex = _playbackQueue.indexWhere((item) => _sameSong(item, song));
+      nextIndex = _adjacentPlayableIndex(_playbackQueue, currentIndex, 1);
+    }
+    if (nextIndex == null) {
+      return;
+    }
+    final nextSong = _playbackQueue[nextIndex];
+    if (_loadedAudioSequence.any((item) => _sameSong(item, nextSong))) {
+      return;
+    }
+    final uri =
+        await _takePrefetchedPlayableUrl(nextSong) ??
+        await _tryGetPlayableUrl(nextSong);
+    if (uri == null || !_sameSong(song, _currentSong)) {
+      return;
+    }
+    final handler = _audioHandler;
+    if (handler != null) {
+      await handler.append(nextSong, uri);
+    } else {
+      await _audioPlayer.addAudioSource(AudioSource.uri(uri));
+    }
+    _loadedAudioSequence.add(nextSong);
+  }
+
   Future<void> _loadAudioSourceWithRetry(
     QqMusicItem song,
-    Uri initialUrl,
-  ) async {
+    Uri initialUrl, {
+    _GaplessSource? nextSource,
+  }) async {
     _loadingAudioSource = true;
     try {
       try {
-        await _audioSourceLoader(song, initialUrl);
+        await _loadResolvedAudioSources(
+          song,
+          initialUrl,
+          nextSource: nextSource,
+        );
       } catch (error) {
         if (!_isSourcePlaybackError(error)) {
           rethrow;
         }
         final refreshedUrl = await _getPlayableUrl(song);
         _unavailableSongKeys.remove(_songKey(song));
-        await _audioSourceLoader(song, refreshedUrl);
+        await _loadResolvedAudioSources(
+          song,
+          refreshedUrl,
+          nextSource: nextSource,
+        );
       }
     } finally {
       _loadingAudioSource = false;
@@ -1773,6 +2020,14 @@ class QqMusicController extends ChangeNotifier {
     final song = _currentSong;
     if (!api.isLoggedIn || song == null || _isLoading) {
       return;
+    }
+    if (_currentSongLikedStatus == null) {
+      await refreshCurrentSongLikedStatus();
+      if (!_sameSong(song, _currentSong) || _currentSongLikedStatus == null) {
+        _setStatusMessage('暂时无法确认喜欢状态，请稍后重试');
+        notifyListeners();
+        return;
+      }
     }
     final wasLiked = isCurrentSongLiked;
     final previous = _featureCache[QqMusicFeature.likedSongs];
@@ -2373,6 +2628,7 @@ class QqMusicController extends ChangeNotifier {
     _statusClearTimer?.cancel();
     _playbackErrorClearTimer?.cancel();
     _playbackStateSaveTimer?.cancel();
+    _sleepTimer?.cancel();
     if (_currentSong != null) {
       unawaited(_savePlaybackState());
     }

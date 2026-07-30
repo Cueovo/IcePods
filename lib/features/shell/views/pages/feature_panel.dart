@@ -20,12 +20,16 @@ class FeaturePanel extends StatefulWidget {
     required this.entry,
     required this.controller,
     required this.isActive,
+    required this.onOpenLyrics,
+    required this.onOpenQueue,
     super.key,
   });
 
   final MenuEntry entry;
   final QqMusicController controller;
   final bool isActive;
+  final VoidCallback onOpenLyrics;
+  final VoidCallback onOpenQueue;
 
   @override
   State<FeaturePanel> createState() => _FeaturePanelState();
@@ -344,7 +348,11 @@ class _FeaturePanelState extends State<FeaturePanel>
       );
     }
     if (widget.entry.feature == QqMusicFeature.radar) {
-      return RadarStation(controller: controller);
+      return RadarStation(
+        controller: controller,
+        onOpenLyrics: widget.onOpenLyrics,
+        onOpenQueue: widget.onOpenQueue,
+      );
     }
     if (widget.entry.feature == QqMusicFeature.homeFeed &&
         controller.currentContainer == null) {
