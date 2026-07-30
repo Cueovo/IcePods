@@ -128,22 +128,20 @@ class _HomePanelState extends State<HomePanel> {
           const SizedBox(width: 15),
           Expanded(
             child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 400),
+              duration: const Duration(milliseconds: 240),
               switchInCurve: const Cubic(0.2, 0.8, 0.2, 1),
               switchOutCurve: Curves.easeIn,
-              transitionBuilder: (child, animation) {
-                final slide = Tween<Offset>(
-                  begin: const Offset(0, .06),
-                  end: Offset.zero,
-                ).animate(animation);
-                return FadeTransition(
-                  opacity: animation,
-                  child: ScaleTransition(
-                    scale: Tween<double>(begin: .92, end: 1).animate(animation),
-                    child: SlideTransition(position: slide, child: child),
-                  ),
-                );
-              },
+              layoutBuilder: (currentChild, previousChildren) => Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (previousChildren.isNotEmpty) previousChildren.last,
+                  ?currentChild,
+                ],
+              ),
+              transitionBuilder: (child, animation) => ScaleTransition(
+                scale: Tween<double>(begin: .985, end: 1).animate(animation),
+                child: child,
+              ),
               child: _PreviewCard(
                 key: ValueKey(selected.id),
                 entry: selected,

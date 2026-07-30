@@ -183,7 +183,7 @@ class _IpodShellView extends StatelessWidget {
           child: Column(
             children: [
               Expanded(
-                flex: 60,
+                flex: 56,
                 child: Padding(
                   // Inset on all sides so continuous corners + bezel sit on chassis.
                   // Top scales down on notch/island (status bar already tall inside).
@@ -336,16 +336,19 @@ class _IpodShellView extends StatelessWidget {
                     alignment: const Alignment(0, -0.12),
                     child: FittedBox(
                       fit: BoxFit.scaleDown,
-                      child: ClickWheel(
-                        onRotate: shell.handleRotate,
-                        onRotationEnd: () =>
-                            unawaited(shell.handleRotationEnd()),
-                        onCenter: shell.handleCenter,
-                        onMenu: shell.handleMenu,
-                        onPrevious: () => shell.stepSelection(-1),
-                        onNext: () => shell.stepSelection(1),
-                        onPlayPause: shell.togglePlayback,
-                        isPlaying: shell.wheelIsPlaying,
+                      child: Transform.scale(
+                        scale: .9,
+                        child: ClickWheel(
+                          onRotate: shell.handleRotate,
+                          onRotationEnd: () =>
+                              unawaited(shell.handleRotationEnd()),
+                          onCenter: shell.handleCenter,
+                          onMenu: shell.handleMenu,
+                          onPrevious: () => shell.stepSelection(-1),
+                          onNext: () => shell.stepSelection(1),
+                          onPlayPause: shell.togglePlayback,
+                          isPlaying: shell.wheelIsPlaying,
+                        ),
                       ),
                     ),
                   ),
