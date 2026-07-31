@@ -511,9 +511,16 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
 
   @override
   Future<void> pause() async {
-    _broadcastOptimisticState(false);
+    if (!kIsWeb &&
+        defaultTargetPlatform == TargetPlatform.android &&
+        !player.playing &&
+        player.processingState == ProcessingState.ready) {
+      await play();
+      return;
+    }
     await _cancelCrossfade();
     await player.pause();
+    _broadcastOptimisticState(false);
   }
 
   @override
@@ -602,11 +609,21 @@ class QqMusicAudioHandler extends BaseAudioHandler with SeekHandler {
   }
 
   List<MediaControl> _controlsFor(bool isPlaying) {
-    // Explicit play/pause (not playPause) so iOS enables MPRemoteCommandCenter
-    // playCommand and pauseCommand  required for full Now Playing eligibility.
+    final playPauseControl = MediaControl(
+      androidIcon: isPlaying
+          ? 'drawable/audio_service_pause'
+          : 'drawable/audio_service_play_arrow',
+      label: isPlaying ? 'Pause' : 'Play',
+      action: MediaAction.playPause,
+    );
     return [
       MediaControl.skipToPrevious,
-      if (isPlaying) MediaControl.pause else MediaControl.play,
+      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android)
+        playPauseControl
+      else if (isPlaying)
+        MediaControl.pause
+      else
+        MediaControl.play,
       MediaControl.skipToNext,
     ];
   }

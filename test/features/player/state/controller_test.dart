@@ -5,6 +5,7 @@ import 'package:just_audio/just_audio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:qqmusic_ipod/business/entities/music.dart';
+import 'package:qqmusic_ipod/business/entities/account.dart';
 import 'package:qqmusic_ipod/business/repositories/music_repository.dart';
 import 'package:qqmusic_ipod/features/player/state/controller.dart';
 import 'package:qqmusic_ipod/features/shell/models/ipod_models.dart';
@@ -74,6 +75,67 @@ void main() {
     },
   );
 
+  test(
+    'queue selection keeps the radar card aligned with the playing song',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final api = _RadarApi();
+      final player = AudioPlayer();
+      final controller = _controller(api: api, player: player);
+      addTearDown(() async {
+        controller.dispose();
+        await player.dispose();
+      });
+
+      await controller.openFeature(_radarEntry);
+      while (!api.secondPageRequested) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      api.releaseSecondPage();
+      while (controller.playbackQueue.length < 2) {
+        await Future<void>.delayed(Duration.zero);
+      }
+
+      expect(await controller.playQueueIndex(1), isTrue);
+
+      expect(controller.currentSong?.id, 'radar-2');
+      expect(controller.selectedItem?.id, 'radar-2');
+      expect(controller.selectedIndex, 1);
+    },
+  );
+
+  test('keeps VIP songs in the queue when playback is blocked', () async {
+    SharedPreferences.setMockInitialValues({});
+    final api = _RadarApi(loggedIn: true);
+    final player = AudioPlayer();
+    final controller = _controller(api: api, player: player);
+    addTearDown(() async {
+      controller.dispose();
+      await player.dispose();
+    });
+
+    await controller.openFeature(_accountEntry);
+    final vipSong = QqMusicItem(
+      id: 'vip-song',
+      mid: 'vip-song',
+      title: 'VIP Song',
+      subtitle: 'Artist',
+      imageUrl: '',
+      type: QqMusicItemType.song,
+      requiresVip: true,
+    );
+
+    expect(
+      await controller.play(vipSong, queue: [_song('free-song'), vipSong]),
+      isFalse,
+    );
+    expect(controller.playbackQueue.map((song) => song.id), [
+      'free-song',
+      'vip-song',
+    ]);
+    expect(controller.playbackError, '该歌曲需要 VIP 会员才能播放');
+  });
+
   test('resolves radar liked state before choosing add or remove', () async {
     SharedPreferences.setMockInitialValues({});
     final api = _RadarApi(loggedIn: true, radarSongLiked: true);
@@ -105,7 +167,6 @@ QqMusicController _controller({
     audioPlaybackPauser: audioPlaybackPauser ?? () async {},
     audioSeeker: (position) async {},
     audioSessionConfigurator: () async {},
-    audioOutputNameLoader: () async => '',
     playerStateStream: const Stream.empty(),
     positionStream: const Stream.empty(),
     durationStream: const Stream.empty(),
@@ -121,6 +182,16 @@ const _radarEntry = MenuEntry(
   title: '音乐雷达',
   description: '',
   feature: QqMusicFeature.radar,
+);
+
+const _accountEntry = MenuEntry(
+  id: 'account',
+  label: '账号',
+  action: MenuAction.feature,
+  imageUrl: '',
+  title: '账号',
+  description: '',
+  feature: QqMusicFeature.account,
 );
 
 QqMusicItem _song(String id) {
@@ -150,6 +221,16 @@ class _RadarApi implements QqMusicApi {
     if (!_secondPageGate.isCompleted) {
       _secondPageGate.complete();
     }
+  }
+
+  @override
+  Future<QqMusicUserProfile> getUserProfile() async {
+    return const QqMusicUserProfile(
+      id: 'user-1',
+      nickname: 'Test User',
+      avatarUrl: '',
+      isVip: false,
+    );
   }
 
   @override

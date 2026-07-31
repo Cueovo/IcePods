@@ -7,7 +7,6 @@ import 'package:just_audio/just_audio.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:qqmusic_ipod/features/shell/models/ipod_models.dart';
-import 'package:qqmusic_ipod/core/audio/audio_output_service.dart';
 import 'package:qqmusic_ipod/business/repositories/music_repository.dart';
 import 'package:qqmusic_ipod/business/entities/account.dart';
 import 'package:qqmusic_ipod/data/models/api_exception.dart';
@@ -58,7 +57,6 @@ class QqMusicController extends ChangeNotifier {
     Future<void> Function()? audioPlaybackPauser,
     Future<void> Function(Duration position)? audioSeeker,
     Future<void> Function()? audioSessionConfigurator,
-    Future<String> Function()? audioOutputNameLoader,
     Stream<PlayerState>? playerStateStream,
     Stream<Duration>? positionStream,
     Stream<Duration?>? durationStream,
@@ -104,8 +102,6 @@ class QqMusicController extends ChangeNotifier {
         };
     _audioSessionConfigurator =
         audioSessionConfigurator ?? _configureAudioSession;
-    _audioOutputNameLoader =
-        audioOutputNameLoader ?? const AudioOutputService().currentOutputName;
     _subscriptions.add(
       (_audioHandler?.currentIndexStream ?? _audioPlayer.currentIndexStream)
           .listen(_handleSequenceIndexChanged),
@@ -198,7 +194,6 @@ class QqMusicController extends ChangeNotifier {
   late final Future<void> Function() _audioPlaybackPauser;
   late final Future<void> Function(Duration position) _audioSeeker;
   late final Future<void> Function() _audioSessionConfigurator;
-  late final Future<String> Function() _audioOutputNameLoader;
   final List<StreamSubscription<Object?>> _subscriptions = [];
   Timer? _statusClearTimer;
   Timer? _playbackErrorClearTimer;
@@ -262,8 +257,6 @@ class QqMusicController extends ChangeNotifier {
   QqMusicItem? _currentSong;
   QqMusicLyrics? _lyrics;
   QqMusicPlaybackMode _playbackMode = QqMusicPlaybackMode.sequential;
-  String _audioOutputName =
-      !kIsWeb && defaultTargetPlatform == TargetPlatform.android ? '本机扬声器' : '';
   Uri? _lastExternalUri;
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
@@ -306,7 +299,6 @@ class QqMusicController extends ChangeNotifier {
   QqMusicLyrics? get lyrics => _lyrics;
   bool get isLoadingLyrics => _isLoadingLyrics;
   QqMusicPlaybackMode get playbackMode => _playbackMode;
-  String get audioOutputName => _audioOutputName;
   bool get isCurrentSongLiked {
     final song = _currentSong;
     if (song == null) {
@@ -527,7 +519,6 @@ class QqMusicController extends ChangeNotifier {
   }
 
   Future<void> initialize() async {
-    unawaited(_loadAudioOutputName());
     await _restorePlaybackState();
     try {
       await api.restoreSession();
@@ -545,7 +536,6 @@ class QqMusicController extends ChangeNotifier {
     if (restoredSong != null) {
       _prepareCurrentSongLikedStatus(restoredSong);
       unawaited(_loadLyrics(restoredSong));
-      unawaited(_loadAudioOutputName());
     }
     notifyListeners();
   }
@@ -1199,21 +1189,6 @@ class QqMusicController extends ChangeNotifier {
       return false;
     }
     if (item.isSong) {
-      if (_shouldBlockVipPlayback(item)) {
-        _setPlaybackError('该歌曲需要 VIP 会员才能播放');
-        notifyListeners();
-        return false;
-      }
-      if (item.isCopyrightRestricted) {
-        _setPlaybackError('歌曲暂无版权');
-        notifyListeners();
-        return false;
-      }
-      if (isUnavailable(item)) {
-        _setPlaybackError(_unavailableSongMessage(item));
-        notifyListeners();
-        return false;
-      }
       return play(item);
     }
     if (item.hasEmbeddedChildren) {
@@ -1280,7 +1255,21 @@ class QqMusicController extends ChangeNotifier {
     if (index < 0 || index >= _playbackQueue.length) {
       return false;
     }
-    return play(_playbackQueue[index], preservePlaybackQueue: true);
+    final song = _playbackQueue[index];
+    final played = await play(song, preservePlaybackQueue: true);
+    if (played) {
+      _selectVisibleSong(song);
+    }
+    return played;
+  }
+
+  void _selectVisibleSong(QqMusicItem song) {
+    final visibleIndex = items.indexWhere((item) => _sameSong(item, song));
+    if (visibleIndex < 0 || visibleIndex == _selectedIndex) {
+      return;
+    }
+    _selectedIndex = visibleIndex;
+    notifyListeners();
   }
 
   bool removeQueueIndex(int index) {
@@ -1327,7 +1316,22 @@ class QqMusicController extends ChangeNotifier {
     bool preservePlaybackQueue = false,
     List<QqMusicItem>? queue,
   }) async {
-    if (_sameSong(song, _currentSong)) {
+    final isCurrent = _sameSong(song, _currentSong);
+    final effectiveQueue = preservePlaybackQueue
+        ? _playbackQueue
+        : queue != null && queue.isNotEmpty
+        ? List<QqMusicItem>.unmodifiable(queue)
+        : (() {
+            final sourceSongs = items.where((item) => item.isSong).toList();
+            return sourceSongs.any((item) => _sameSong(item, song))
+                ? List<QqMusicItem>.unmodifiable(sourceSongs)
+                : List<QqMusicItem>.unmodifiable([song]);
+          })();
+    if (!preservePlaybackQueue && !isCurrent) {
+      _playbackQueue = effectiveQueue;
+      _schedulePlaybackStateSave(immediate: true);
+    }
+    if (isCurrent) {
       _clearPlaybackError();
       if (_currentSongLikedStatus == null) {
         _prepareCurrentSongLikedStatus(song);
@@ -1350,16 +1354,6 @@ class QqMusicController extends ChangeNotifier {
       notifyListeners();
       return false;
     }
-    final effectiveQueue = preservePlaybackQueue
-        ? _playbackQueue
-        : queue != null && queue.isNotEmpty
-        ? List<QqMusicItem>.unmodifiable(queue)
-        : (() {
-            final sourceSongs = items.where((item) => item.isSong).toList();
-            return sourceSongs.any((item) => _sameSong(item, song))
-                ? List<QqMusicItem>.unmodifiable(sourceSongs)
-                : List<QqMusicItem>.unmodifiable([song]);
-          })();
     _clearPlaybackError();
     _isLoading = true;
     notifyListeners();
@@ -1380,10 +1374,6 @@ class QqMusicController extends ChangeNotifier {
       _currentSong = song;
       _prepareCurrentSongLikedStatus(song);
       unawaited(_loadLyrics(song));
-      unawaited(_loadAudioOutputName());
-      if (!preservePlaybackQueue) {
-        _playbackQueue = effectiveQueue;
-      }
       _sequenceTransitionsArmed = true;
       // Never clobber a good player-reported duration with a zero metadata field
       // (home feed cards often omit interval).
@@ -1523,12 +1513,7 @@ class QqMusicController extends ChangeNotifier {
         final nextSong = activeItems[next];
         final switched = await play(nextSong, preservePlaybackQueue: true);
         if (switched) {
-          final visibleIndex = items.indexWhere(
-            (item) => _sameSong(item, nextSong),
-          );
-          if (visibleIndex >= 0) {
-            _selectedIndex = visibleIndex;
-          }
+          _selectVisibleSong(nextSong);
           return;
         }
         // Keep walking past VIP / unplayable songs instead of stopping.
@@ -1683,7 +1668,6 @@ class QqMusicController extends ChangeNotifier {
     _clearPlaybackError();
     _prepareCurrentSongLikedStatus(song);
     unawaited(_loadLyrics(song));
-    unawaited(_loadAudioOutputName());
     _duration = song.duration;
     _position = Duration.zero;
     _publishPlaybackProgress();
@@ -2190,15 +2174,6 @@ class QqMusicController extends ChangeNotifier {
         notifyListeners();
       }
     }
-  }
-
-  Future<void> _loadAudioOutputName() async {
-    final name = await _audioOutputNameLoader();
-    if (name.isEmpty || name == _audioOutputName) {
-      return;
-    }
-    _audioOutputName = name;
-    notifyListeners();
   }
 
   Future<void> seekToProgress(

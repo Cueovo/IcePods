@@ -1,17 +1,35 @@
-# Animation Plans
+# Animation and Experience Plans
+
+These plans are for the native Android/iOS app only. Web layout, browser interaction, `ambient_background_web.dart`, Web platform views, and Web-specific responsive behavior are intentionally out of scope.
 
 | # | Plan | Severity | Status |
 | --- | --- | --- | --- |
-| 001 | [Polish and stabilize submenu transitions](001-polish-submenu-transition.md) | HIGH | IMPLEMENTED — DEVICE CHECK PENDING |
-| 002 | [End the splash before the Lottie black tail](002-end-splash-before-lottie-black-tail.md) | HIGH | IMPLEMENTED — DEVICE CHECK PENDING |
+| 003 | [Establish the app visual system](003-establish-app-visual-system.md) | HIGH | TODO |
+| 004 | [Make album artwork drive the app atmosphere](004-album-driven-atmosphere.md) | HIGH | TODO |
+| 005 | [Unify native scene motion and page transitions](005-unify-native-scene-motion.md) | HIGH | TODO |
+| 006 | [Give the Click Wheel physical response](006-click-wheel-material-feedback.md) | HIGH | TODO |
+| 007 | [Create native portrait and landscape compositions](007-native-responsive-composition.md) | HIGH | TODO |
+| 008 | [Make Now Playing, Cover Flow, and Queue one artwork scene](008-unify-artwork-player-scenes.md) | HIGH | TODO |
+| 009 | [Isolate native rebuilds and harden accessibility](009-native-performance-accessibility.md) | HIGH | TODO |
 
 ## Recommended execution order
 
-1. Plan 001 is implemented. Complete its physical-device and reduced-motion feel checks before marking it DONE.
-2. Plan 002 is implemented. Complete its physical-device and reduced-motion feel checks before marking it DONE.
+1. **003 — Visual system**: establish semantic color and typography tokens first.
+2. **004 — Album atmosphere**: make artwork the source of ambient color and contrast.
+3. **005 — Scene motion**: unify native transitions and reduced-motion behavior.
+4. **006 — Click Wheel**: add tactile feedback after motion tokens exist.
+5. **007 — Native composition**: make portrait/landscape layouts intentional.
+6. **008 — Artwork scenes**: connect Cover Flow, Now Playing, and Queue using the palette and motion foundations.
+7. **009 — Performance/accessibility**: profile and harden the final visual system; this can begin with mechanical tests earlier but should be completed after 003–008 stabilize.
 
 ## Dependencies
 
-- Plan 001 has no package or plan dependencies.
-- Plan 002 has no package or plan dependencies and does not alter plan 001's submenu transition.
-- Reassess the ambient-background crossfade only after plan 002 is executed and profiled on a physical device.
+- 004 depends on the semantic color roles from 003.
+- 005 depends on the motion tokens from 003 and should be completed before 006 and 008.
+- 007 should use the typography and hit-target rules from 003 and 009.
+- 008 depends on the artwork identity/palette from 004 and transition grammar from 005.
+- 009 is an ongoing verification gate for every other plan.
+
+## Historical plans
+
+Plans 001 and 002 existed in the repository history and were previously marked implemented with physical-device checks pending. They are not recreated here because the current worktree records them as deleted; the new plan sequence begins at 003 without restoring those user changes.

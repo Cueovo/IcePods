@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -23,11 +24,11 @@ class NowPlayingPanel extends StatefulWidget {
     this.isEmpty = false,
     this.lyrics,
     this.isLoadingLyrics = false,
-    this.audioOutputName = '',
     this.isLiked = false,
     this.playbackMode = QqMusicPlaybackMode.sequential,
     this.queueLength = 0,
     this.lyricsOpenRevision = 0,
+    this.sleepTimerDeadline,
     this.onLikedPressed,
     this.onLyricsPressed,
     this.onPlaybackModePressed,
@@ -47,11 +48,11 @@ class NowPlayingPanel extends StatefulWidget {
   final bool isEmpty;
   final QqMusicLyrics? lyrics;
   final bool isLoadingLyrics;
-  final String audioOutputName;
   final bool isLiked;
   final QqMusicPlaybackMode playbackMode;
   final int queueLength;
   final int lyricsOpenRevision;
+  final DateTime? sleepTimerDeadline;
   final VoidCallback? onLikedPressed;
   final VoidCallback? onLyricsPressed;
   final VoidCallback? onPlaybackModePressed;
@@ -261,7 +262,6 @@ class _NowPlayingPanelState extends State<NowPlayingPanel> {
                   _LyricsTrackMetadata(
                     title: widget.album.title,
                     artist: widget.album.artist,
-                    audioOutputName: widget.audioOutputName,
                   )
                 else ...[
                   Text(
@@ -285,10 +285,6 @@ class _NowPlayingPanelState extends State<NowPlayingPanel> {
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  if (widget.audioOutputName.isNotEmpty) ...[
-                    SizedBox(height: tight ? 2 : (compact ? 4 : 6)),
-                    _AudioOutputPill(name: widget.audioOutputName),
-                  ],
                 ],
                 SizedBox(height: progressGap),
                 _PlayerProgressBar(
@@ -330,6 +326,8 @@ class _NowPlayingPanelState extends State<NowPlayingPanel> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(currentTime, style: _timeStyle),
+                            if (widget.sleepTimerDeadline case final deadline?)
+                              _SleepTimerIndicator(deadline: deadline),
                             Text(totalTime, style: _timeStyle),
                           ],
                         ),
@@ -394,6 +392,137 @@ class _NowPlayingPanelState extends State<NowPlayingPanel> {
       ),
     );
   }
+}
+
+class _SleepTimerIndicator extends StatefulWidget {
+  const _SleepTimerIndicator({required this.deadline});
+
+  final DateTime deadline;
+
+  @override
+  State<_SleepTimerIndicator> createState() => _SleepTimerIndicatorState();
+}
+
+class _SleepTimerIndicatorState extends State<_SleepTimerIndicator> {
+  Timer? _timer;
+  late int _remainingSeconds;
+
+  @override
+  void initState() {
+    super.initState();
+    _restartTimer();
+  }
+
+  @override
+  void didUpdateWidget(_SleepTimerIndicator oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.deadline != widget.deadline) {
+      _restartTimer();
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _restartTimer() {
+    _timer?.cancel();
+    _remainingSeconds = _secondsUntil(widget.deadline);
+    if (_remainingSeconds <= 0) {
+      return;
+    }
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      final deadlineRemaining = _secondsUntil(widget.deadline);
+      final remaining = math.min(
+        math.max(0, _remainingSeconds - 1),
+        deadlineRemaining,
+      );
+      if (remaining == _remainingSeconds) {
+        return;
+      }
+      if (remaining <= 0) {
+        _timer?.cancel();
+      }
+      if (mounted) {
+        setState(() => _remainingSeconds = remaining);
+      }
+    });
+  }
+
+  int _secondsUntil(DateTime deadline) {
+    final milliseconds = deadline.difference(DateTime.now()).inMilliseconds;
+    return milliseconds <= 0 ? 0 : (milliseconds / 1000).ceil();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final countdown = _formatCountdown(_remainingSeconds);
+    return Semantics(
+      label: '定时关闭',
+      value: '剩余 $countdown',
+      child: RepaintBoundary(
+        child: DecoratedBox(
+          key: const ValueKey('player-sleep-timer'),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0x38C8B7FF), Color(0x246A5BE7)],
+            ),
+            borderRadius: BorderRadius.circular(99),
+            border: Border.all(color: const Color(0x36FFFFFF)),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x28000000),
+                blurRadius: 10,
+                offset: Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.bedtime_rounded,
+                  size: 12,
+                  color: Color(0xFFD9CFFF),
+                ),
+                const SizedBox(width: 5),
+                Text(
+                  countdown,
+                  key: const ValueKey('player-sleep-timer-countdown'),
+                  style: const TextStyle(
+                    color: Color(0xF2FFFFFF),
+                    fontSize: 11,
+                    height: 1,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: .25,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String _formatCountdown(int totalSeconds) {
+  final hours = totalSeconds ~/ 3600;
+  final minutes = (totalSeconds % 3600) ~/ 60;
+  final seconds = totalSeconds % 60;
+  final minuteText = minutes.toString().padLeft(2, '0');
+  final secondText = seconds.toString().padLeft(2, '0');
+  if (hours == 0) {
+    return '$minuteText:$secondText';
+  }
+  return '${hours.toString().padLeft(2, '0')}:$minuteText:$secondText';
 }
 
 class _PlayerProgressBar extends StatelessWidget {
@@ -968,12 +1097,9 @@ class _LyricsViewState extends State<_LyricsView>
       return;
     }
     final position = _scrollController.position;
-    final target =
-        (_activeIndex * _itemExtent -
-                position.viewportDimension / 2 +
-                _itemExtent / 2)
-            .clamp(0.0, position.maxScrollExtent)
-            .toDouble();
+    final target = (_activeIndex * _itemExtent)
+        .clamp(position.minScrollExtent, position.maxScrollExtent)
+        .toDouble();
     if (animate) {
       final adjacent = (_activeIndex - _previousActiveIndex).abs() <= 1;
       _scrollController.animateTo(
@@ -1032,25 +1158,33 @@ class _LyricsViewState extends State<_LyricsView>
       // No side scrollbar on lyrics — only the vertical fade mask above.
       child: ScrollConfiguration(
         behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
-        child: ListView.builder(
-          key: const ValueKey('lyrics-scroll-list'),
-          controller: _scrollController,
-          itemExtent: _itemExtent,
-          physics: const BouncingScrollPhysics(),
-          padding: EdgeInsets.zero,
-          itemCount: lines.length,
-          itemBuilder: (context, index) {
-            final active = index == _activeIndex;
-            final previous = index == _previousActiveIndex && !active;
-            final lineTransition = _lineTransitionProgress;
-            return _LyricLineText(
-              key: ValueKey('lyric-line-$index'),
-              line: lines[index],
-              position: _displayPosition,
-              active: active,
-              previous: previous,
-              relativeIndex: index - _activeIndex,
-              lineTransition: lineTransition,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final centerPadding = math.max(
+              0.0,
+              (constraints.maxHeight - _itemExtent) / 2,
+            );
+            return ListView.builder(
+              key: const ValueKey('lyrics-scroll-list'),
+              controller: _scrollController,
+              itemExtent: _itemExtent,
+              physics: const BouncingScrollPhysics(),
+              padding: EdgeInsets.symmetric(vertical: centerPadding),
+              itemCount: lines.length,
+              itemBuilder: (context, index) {
+                final active = index == _activeIndex;
+                final previous = index == _previousActiveIndex && !active;
+                final lineTransition = _lineTransitionProgress;
+                return _LyricLineText(
+                  key: ValueKey('lyric-line-$index'),
+                  line: lines[index],
+                  position: _displayPosition,
+                  active: active,
+                  previous: previous,
+                  relativeIndex: index - _activeIndex,
+                  lineTransition: lineTransition,
+                );
+              },
             );
           },
         ),
@@ -1060,15 +1194,10 @@ class _LyricsViewState extends State<_LyricsView>
 }
 
 class _LyricsTrackMetadata extends StatelessWidget {
-  const _LyricsTrackMetadata({
-    required this.title,
-    required this.artist,
-    required this.audioOutputName,
-  });
+  const _LyricsTrackMetadata({required this.title, required this.artist});
 
   final String title;
   final String artist;
-  final String audioOutputName;
 
   @override
   Widget build(BuildContext context) {
@@ -1121,104 +1250,7 @@ class _LyricsTrackMetadata extends StatelessWidget {
             ),
           ],
         ),
-        if (audioOutputName.isNotEmpty) ...[
-          const SizedBox(height: 7),
-          _AudioOutputPill(name: audioOutputName),
-        ],
       ],
-    );
-  }
-}
-
-class _AudioOutputPill extends StatelessWidget {
-  const _AudioOutputPill({required this.name});
-
-  final String name;
-
-  bool get _isExternal {
-    final normalized = name.trim().toLowerCase();
-    if (normalized.isEmpty) {
-      return false;
-    }
-    const localMarkers = <String>[
-      '本机',
-      '扬声器',
-      'speaker',
-      'phone',
-      'built-in',
-      'builtin',
-      'device',
-      '手机',
-      '听筒',
-      'earpiece',
-      'wired_headset',
-      '有线',
-    ];
-    final looksLocal = localMarkers.any(normalized.contains);
-    final looksExternal =
-        normalized.contains('bluetooth') ||
-        normalized.contains('蓝牙') ||
-        normalized.contains('airpods') ||
-        normalized.contains('buds') ||
-        normalized.contains('headset') ||
-        normalized.contains('headphone') ||
-        normalized.contains('耳机');
-    return looksExternal || !looksLocal;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final external = _isExternal;
-    final accent = external ? const Color(0xFF31C27C) : const Color(0x80FFFFFF);
-    final textColor = external
-        ? const Color(0xD9FFFFFF)
-        : const Color(0x8FFFFFFF);
-    return Align(
-      alignment: Alignment.center,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 220),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: const Color(0x1AFFFFFF),
-            borderRadius: BorderRadius.circular(AppRadii.pill),
-            border: Border.all(
-              color: external
-                  ? const Color(0x3331C27C)
-                  : const Color(0x14FFFFFF),
-            ),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  external
-                      ? Icons.bluetooth_audio_rounded
-                      : Icons.speaker_rounded,
-                  size: 13,
-                  color: accent,
-                ),
-                const SizedBox(width: 5),
-                Flexible(
-                  child: Text(
-                    name,
-                    key: const ValueKey('audio-output-name'),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: textColor,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      height: 1.1,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

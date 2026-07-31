@@ -20,6 +20,15 @@ const _secondSong = QqMusicItem(
   type: QqMusicItemType.song,
 );
 
+const _vipSong = QqMusicItem(
+  id: 'vip-song',
+  title: 'VIP Song',
+  subtitle: 'VIP Artist',
+  imageUrl: '',
+  type: QqMusicItemType.song,
+  requiresVip: true,
+);
+
 QqMusicItem _song(int number) {
   return QqMusicItem(
     id: 'song-$number',
@@ -68,6 +77,37 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('queue-clear-upcoming')));
     expect(cleared, isTrue);
+  });
+
+  testWidgets('marks VIP songs and shows playback errors', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 360,
+            height: 420,
+            child: PlaybackQueuePanel(
+              queue: const [_vipSong],
+              currentIndex: -1,
+              selectedIndex: 0,
+              isPlaying: false,
+              playbackError: '该歌曲需要 VIP 会员才能播放',
+              onPlayIndex: (_) {},
+              onRemoveIndex: (_) {},
+              onClearUpcoming: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('VIP'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('queue-vip-badge-0-vip-song')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('queue-playback-error')), findsOneWidget);
+    expect(find.text('该歌曲需要 VIP 会员才能播放'), findsOneWidget);
   });
 
   testWidgets('keeps the fifth queue row above the glass edge', (tester) async {

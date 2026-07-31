@@ -306,6 +306,8 @@ class _IpodShellView extends StatelessWidget {
                                             selectedIndex:
                                                 shell.selectedQueueIndex,
                                             isPlaying: shell.music.isPlaying,
+                                            playbackError:
+                                                shell.music.playbackError,
                                             onPlayIndex: (index) => unawaited(
                                               shell.playQueueIndex(index),
                                             ),
@@ -516,12 +518,12 @@ class _NowPlayingHost extends StatelessWidget {
           isEmpty: shell.music.currentSong == null && !shell.hasLocalSelection,
           lyrics: shell.music.lyrics,
           isLoadingLyrics: shell.music.isLoadingLyrics,
-          audioOutputName: shell.music.audioOutputName,
           isLiked: shell.music.isCurrentSongLiked,
           isSeeking: preview != null,
           playbackMode: shell.music.playbackMode,
           queueLength: shell.music.playbackQueue.length,
           lyricsOpenRevision: shell.lyricsOpenRevision,
+          sleepTimerDeadline: shell.music.sleepTimerDeadline,
           onLikedPressed: () => unawaited(shell.music.toggleCurrentSongLiked()),
           onPlaybackModePressed: shell.music.cyclePlaybackMode,
           onQueuePressed: shell.openQueue,

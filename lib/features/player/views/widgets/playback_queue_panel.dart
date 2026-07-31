@@ -12,6 +12,7 @@ class PlaybackQueuePanel extends StatefulWidget {
     required this.currentIndex,
     required this.selectedIndex,
     required this.isPlaying,
+    this.playbackError = '',
     required this.onPlayIndex,
     required this.onRemoveIndex,
     required this.onClearUpcoming,
@@ -22,6 +23,7 @@ class PlaybackQueuePanel extends StatefulWidget {
   final int currentIndex;
   final int selectedIndex;
   final bool isPlaying;
+  final String playbackError;
   final ValueChanged<int> onPlayIndex;
   final ValueChanged<int> onRemoveIndex;
   final VoidCallback onClearUpcoming;
@@ -181,6 +183,43 @@ class _PlaybackQueuePanelState extends State<PlaybackQueuePanel> {
                 ),
               ],
             ),
+            if (widget.playbackError.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Container(
+                key: const ValueKey('queue-playback-error'),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 7,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0x26FF8A8A),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0x66FF9B9B)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.lock_outline_rounded,
+                      color: Color(0xFFFFB0B0),
+                      size: 16,
+                    ),
+                    const SizedBox(width: 7),
+                    Expanded(
+                      child: Text(
+                        widget.playbackError,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Color(0xFFFFC2C2),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 10),
             Expanded(
               child: widget.queue.isEmpty
@@ -266,7 +305,8 @@ class _PlaybackQueueTile extends StatelessWidget {
     return Semantics(
       button: true,
       selected: selected,
-      label: '${item.title}，${item.subtitle}，$stateLabel',
+      label:
+          '${item.title}，${item.subtitle}，${item.requiresVip ? 'VIP 歌曲，' : ''}$stateLabel',
       child: Material(
         color: Colors.transparent,
         child: InkWell(
@@ -325,17 +365,52 @@ class _PlaybackQueueTile extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        item.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: textColor,
-                          fontSize: 13,
-                          fontWeight: current || selected
-                              ? AppTextStyles.strong
-                              : AppTextStyles.regular,
-                        ),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              item.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: textColor,
+                                fontSize: 13,
+                                fontWeight: current || selected
+                                    ? AppTextStyles.strong
+                                    : AppTextStyles.regular,
+                              ),
+                            ),
+                          ),
+                          if (item.isSong && item.requiresVip) ...[
+                            const SizedBox(width: 5),
+                            Container(
+                              key: ValueKey(
+                                'queue-vip-badge-$index-${item.id}',
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                                vertical: 1,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0x26F2C14E),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(
+                                  color: const Color(0xBFF2C14E),
+                                  width: .7,
+                                ),
+                              ),
+                              child: const Text(
+                                'VIP',
+                                style: TextStyle(
+                                  color: Color(0xFFF2C14E),
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.w800,
+                                  height: 1.1,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                       if (item.subtitle.isNotEmpty) ...[
                         const SizedBox(height: 2),
