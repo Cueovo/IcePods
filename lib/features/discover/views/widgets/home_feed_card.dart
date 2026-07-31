@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:qqmusic_ipod/business/entities/music.dart';
+import 'package:qqmusic_ipod/core/theme/tokens/app_tokens.dart';
 import 'package:qqmusic_ipod/core/theme/widgets/artwork_image.dart';
 
 class HomeFeedCard extends StatelessWidget {
@@ -42,10 +43,14 @@ class HomeFeedCard extends StatelessWidget {
         height: 86,
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: selected ? const Color(0x2631C27C) : const Color(0x14FFFFFF),
+          color: selected
+              ? AppColors.brandQq.withValues(alpha: .15)
+              : AppColors.glassLow,
           borderRadius: BorderRadius.circular(18),
           border: Border.all(
-            color: selected ? const Color(0x8031C27C) : const Color(0x18FFFFFF),
+            color: selected
+                ? AppColors.brandQq.withValues(alpha: .5)
+                : AppColors.border,
           ),
         ),
         child: Row(
@@ -64,7 +69,7 @@ class HomeFeedCard extends StatelessWidget {
                               : item.type == QqMusicItemType.chart
                               ? Icons.leaderboard_rounded
                               : Icons.queue_music_rounded,
-                          color: const Color(0xFF31C27C),
+                          color: AppColors.brandQq,
                           size: 30,
                         ),
                       )
@@ -89,15 +94,13 @@ class HomeFeedCard extends StatelessWidget {
                       vertical: 2,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0x3331C27C),
+                      color: AppColors.brandQq.withValues(alpha: .2),
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: Text(
                       _badge,
-                      style: const TextStyle(
-                        color: Color(0xFF8DE5B9),
-                        fontSize: 9,
-                        fontWeight: FontWeight.w700,
+                      style: AppTextStyles.micro.copyWith(
+                        color: AppColors.brandQq.withValues(alpha: .8),
                       ),
                     ),
                   ),
@@ -106,10 +109,10 @@ class HomeFeedCard extends StatelessWidget {
                     item.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: selected ? Colors.white : const Color(0xEEFFFFFF),
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
+                    style: AppTextStyles.label.copyWith(
+                      color: selected
+                          ? AppColors.textPrimary
+                          : AppColors.textSecondary,
                     ),
                   ),
                   const SizedBox(height: 3),
@@ -117,10 +120,8 @@ class HomeFeedCard extends StatelessWidget {
                     item.subtitle,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Color(0x88FFFFFF),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
+                    style: AppTextStyles.micro.copyWith(
+                      color: AppColors.textTertiary,
                     ),
                   ),
                 ],
@@ -128,9 +129,7 @@ class HomeFeedCard extends StatelessWidget {
             ),
             Icon(
               Icons.chevron_right_rounded,
-              color: selected
-                  ? const Color(0xFF31C27C)
-                  : const Color(0x55FFFFFF),
+              color: selected ? AppColors.brandQq : AppColors.textMuted,
               size: 22,
             ),
           ],

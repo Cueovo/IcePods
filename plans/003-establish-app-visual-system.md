@@ -1,7 +1,7 @@
 # 003 — Establish the App Visual System
 
-- **Status**: TODO
-- **Commit**: 60c800d
+- **Status**: IMPLEMENTED
+- **Commit**: pending
 - **Severity**: HIGH
 - **Category**: Cohesion & tokens; Typography; Accessibility
 - **Estimated scope**: 7 source files, 1 optional licensed font asset set, medium refactor

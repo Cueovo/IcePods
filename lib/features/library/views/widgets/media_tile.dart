@@ -44,16 +44,16 @@ class MediaTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 8),
         decoration: BoxDecoration(
           color: current
-              ? AppColors.accentSoft
+              ? AppColors.interactionSoft
               : selected
               ? AppColors.surfaceSelected
               : AppColors.surface,
           borderRadius: BorderRadius.circular(AppRadii.tile),
           border: Border.all(
             color: current
-                ? AppColors.accentBorder
+                ? AppColors.interactionBorder
                 : selected
-                ? AppColors.accentSoft
+                ? AppColors.interactionSoft
                 : Colors.transparent,
           ),
         ),
@@ -96,16 +96,16 @@ class MediaTile extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             color: item.isCopyrightRestricted || unavailable
-                                ? const Color(0x70FFFFFF)
+                                ? AppColors.textMuted
                                 : current
-                                ? AppColors.accent
+                                ? AppColors.interaction
                                 : selected
-                                ? Colors.white
-                                : const Color(0xCCFFFFFF),
-                            fontSize: 13,
+                                ? AppColors.textPrimary
+                                : AppColors.textSecondary,
+                            fontSize: 14,
                             fontWeight: selected || current
-                                ? FontWeight.w800
-                                : FontWeight.w700,
+                                ? AppTextStyles.strong
+                                : AppTextStyles.regular,
                           ),
                         ),
                       ),
@@ -173,17 +173,17 @@ class MediaTile extends StatelessWidget {
                             vertical: 1,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(0x26F2C14E),
+                            color: AppColors.vip.withValues(alpha: .15),
                             borderRadius: BorderRadius.circular(4),
                             border: Border.all(
-                              color: const Color(0xBFF2C14E),
+                              color: AppColors.vip.withValues(alpha: .75),
                               width: .7,
                             ),
                           ),
                           child: const Text(
                             'VIP',
                             style: TextStyle(
-                              color: Color(0xFFF2C14E),
+                              color: AppColors.vip,
                               fontSize: 8,
                               fontWeight: FontWeight.w800,
                               height: 1.1,
@@ -199,10 +199,8 @@ class MediaTile extends StatelessWidget {
                       item.subtitle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Color(0x70FFFFFF),
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
+                      style: AppTextStyles.metadata.copyWith(
+                        color: AppColors.textMuted,
                       ),
                     ),
                   ],
@@ -219,7 +217,7 @@ class MediaTile extends StatelessWidget {
                   marked
                       ? Icons.favorite_rounded
                       : Icons.favorite_border_rounded,
-                  color: marked ? AppColors.accent : AppColors.textMuted,
+                  color: marked ? AppColors.interaction : AppColors.textMuted,
                   size: 17,
                 ),
               ),
@@ -241,9 +239,9 @@ class MediaTile extends StatelessWidget {
               color: item.isCopyrightRestricted
                   ? const Color(0x35FFFFFF)
                   : current
-                  ? AppColors.accent
+                  ? AppColors.interaction
                   : selected
-                  ? AppColors.accent
+                  ? AppColors.interaction
                   : const Color(0x55FFFFFF),
               size: current ? 20 : 19,
             ),

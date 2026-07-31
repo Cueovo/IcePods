@@ -123,7 +123,7 @@ class _PlaybackQueuePanelState extends State<PlaybackQueuePanel> {
                     gradient: const LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
-                      colors: [Color(0xFF5C49B8), Color(0xFF30265F)],
+                      colors: [AppColors.interaction, AppColors.canvas],
                     ),
                     borderRadius: BorderRadius.circular(AppRadii.artwork),
                     boxShadow: const [
@@ -137,7 +137,7 @@ class _PlaybackQueuePanelState extends State<PlaybackQueuePanel> {
                   child: const Icon(
                     Icons.queue_music_rounded,
                     size: 24,
-                    color: Color(0xFFE8E1FF),
+                    color: AppColors.textPrimary,
                   ),
                 ),
                 const SizedBox(width: 11),
@@ -192,15 +192,17 @@ class _PlaybackQueuePanelState extends State<PlaybackQueuePanel> {
                   vertical: 7,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0x26FF8A8A),
+                  color: AppColors.danger.withValues(alpha: .15),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0x66FF9B9B)),
+                  border: Border.all(
+                    color: AppColors.danger.withValues(alpha: .4),
+                  ),
                 ),
                 child: Row(
                   children: [
                     const Icon(
                       Icons.lock_outline_rounded,
-                      color: Color(0xFFFFB0B0),
+                      color: AppColors.danger,
                       size: 16,
                     ),
                     const SizedBox(width: 7),
@@ -209,10 +211,9 @@ class _PlaybackQueuePanelState extends State<PlaybackQueuePanel> {
                         widget.playbackError,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Color(0xFFFFC2C2),
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
+                        style: AppTextStyles.micro.copyWith(
+                          color: AppColors.danger,
+                          fontWeight: AppTextStyles.strong,
                         ),
                       ),
                     ),
@@ -295,10 +296,10 @@ class _PlaybackQueueTile extends StatelessWidget {
     final reduceMotion =
         MediaQuery.maybeOf(context)?.disableAnimations ?? false;
     final textColor = current
-        ? AppColors.accent
+        ? AppColors.interaction
         : selected
-        ? Colors.white
-        : const Color(0xCCFFFFFF);
+        ? AppColors.textPrimary
+        : AppColors.textSecondary;
     final stateLabel = current
         ? (isPlaying ? '正在播放' : '当前歌曲')
         : '队列第 ${index + 1} 首';
@@ -321,16 +322,16 @@ class _PlaybackQueueTile extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 8),
             decoration: BoxDecoration(
               color: current
-                  ? AppColors.accentSoft
+                  ? AppColors.interactionSoft
                   : selected
                   ? AppColors.surfaceSelected
                   : AppColors.surface,
               borderRadius: BorderRadius.circular(AppRadii.tile),
               border: Border.all(
                 color: current
-                    ? AppColors.accentBorder
+                    ? AppColors.interactionBorder
                     : selected
-                    ? AppColors.accentSoft
+                    ? AppColors.interactionSoft
                     : Colors.transparent,
               ),
             ),
@@ -372,9 +373,8 @@ class _PlaybackQueueTile extends StatelessWidget {
                               item.title,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
+                              style: AppTextStyles.body.copyWith(
                                 color: textColor,
-                                fontSize: 13,
                                 fontWeight: current || selected
                                     ? AppTextStyles.strong
                                     : AppTextStyles.regular,
@@ -392,19 +392,19 @@ class _PlaybackQueueTile extends StatelessWidget {
                                 vertical: 1,
                               ),
                               decoration: BoxDecoration(
-                                color: const Color(0x26F2C14E),
+                                color: AppColors.vip.withValues(alpha: .15),
                                 borderRadius: BorderRadius.circular(4),
                                 border: Border.all(
-                                  color: const Color(0xBFF2C14E),
+                                  color: AppColors.vip.withValues(alpha: .75),
                                   width: .7,
                                 ),
                               ),
                               child: const Text(
                                 'VIP',
                                 style: TextStyle(
-                                  color: Color(0xFFF2C14E),
+                                  color: AppColors.vip,
                                   fontSize: 8,
-                                  fontWeight: FontWeight.w800,
+                                  fontWeight: AppTextStyles.strong,
                                   height: 1.1,
                                 ),
                               ),
@@ -418,10 +418,8 @@ class _PlaybackQueueTile extends StatelessWidget {
                           item.subtitle,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
+                          style: AppTextStyles.metadata.copyWith(
                             color: AppColors.textMuted,
-                            fontSize: 10,
-                            fontWeight: AppTextStyles.regular,
                           ),
                         ),
                       ],
@@ -433,7 +431,7 @@ class _PlaybackQueueTile extends StatelessWidget {
                     isPlaying
                         ? Icons.graphic_eq_rounded
                         : Icons.pause_circle_filled_rounded,
-                    color: AppColors.accent,
+                    color: AppColors.interaction,
                     size: 20,
                   )
                 else if (onRemove != null)
@@ -453,7 +451,7 @@ class _PlaybackQueueTile extends StatelessWidget {
                       icon: Icon(
                         Icons.close_rounded,
                         color: selected
-                            ? AppColors.accent
+                            ? AppColors.interaction
                             : AppColors.textMuted,
                         size: 18,
                       ),

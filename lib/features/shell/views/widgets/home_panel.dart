@@ -1,7 +1,8 @@
-﻿import 'dart:ui';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
+import 'package:qqmusic_ipod/core/theme/tokens/app_tokens.dart';
 import 'package:qqmusic_ipod/features/shell/models/ipod_models.dart';
 import 'package:qqmusic_ipod/features/shell/views/widgets/menu_artwork.dart';
 
@@ -176,10 +177,10 @@ class _MenuTile extends StatelessWidget {
       height: _menuTileHeight,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
-        color: selected ? const Color(0x26FFFFFF) : Colors.transparent,
+        color: selected ? AppColors.glassMid : Colors.transparent,
         borderRadius: BorderRadius.circular(15),
         border: Border.all(
-          color: selected ? const Color(0x33FFFFFF) : Colors.transparent,
+          color: selected ? AppColors.interactionSoft : Colors.transparent,
         ),
         boxShadow: selected
             ? const [
@@ -202,7 +203,7 @@ class _MenuTile extends StatelessWidget {
               decoration: BoxDecoration(
                 color: Color(entry.chassisColorValue!),
                 shape: BoxShape.circle,
-                border: Border.all(color: const Color(0x66FFFFFF)),
+                border: Border.all(color: AppColors.textTertiary),
               ),
             )
           else
@@ -214,30 +215,28 @@ class _MenuTile extends StatelessWidget {
               decoration: BoxDecoration(
                 color: selected
                     ? MenuArtwork.accentFor(entry).withValues(alpha: 0.42)
-                    : const Color(0x18FFFFFF),
+                    : AppColors.glassLow,
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
                   color: selected
-                      ? const Color(0x40FFFFFF)
-                      : const Color(0x14FFFFFF),
+                      ? AppColors.textTertiary.withValues(alpha: .5)
+                      : AppColors.border,
                 ),
               ),
               child: Icon(
                 MenuArtwork.iconFor(entry),
                 size: 15,
-                color: selected ? Colors.white : const Color(0xB3FFFFFF),
+                color: selected
+                    ? AppColors.textPrimary
+                    : AppColors.textSecondary,
               ),
             ),
           Expanded(
             child: AnimatedDefaultTextStyle(
               duration: const Duration(milliseconds: 180),
               curve: Curves.easeOutCubic,
-              style: TextStyle(
-                color: selected ? Colors.white : const Color(0x99FFFFFF),
-                fontSize: 13,
-                fontWeight: selected ? FontWeight.w800 : FontWeight.w700,
-                letterSpacing: selected ? 0.1 : 0,
-              ),
+              style: (selected ? AppTextStyles.label : AppTextStyles.body)
+                  .copyWith(letterSpacing: selected ? 0.1 : 0),
               child: Text(
                 entry.label,
                 maxLines: 1,
@@ -251,11 +250,12 @@ class _MenuTile extends StatelessWidget {
               child: Text(
                 value!,
                 key: ValueKey(value),
-                style: TextStyle(
-                  color: selected ? Colors.white : const Color(0x99FFFFFF),
-                  fontSize: 10,
-                  fontWeight: FontWeight.w800,
-                ),
+                style: (selected ? AppTextStyles.label : AppTextStyles.metadata)
+                    .copyWith(
+                      color: selected
+                          ? AppColors.textPrimary
+                          : AppColors.textSecondary,
+                    ),
               ),
             )
           else
@@ -388,11 +388,8 @@ class _PreviewCard extends StatelessWidget {
                                 entry.title,
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: Colors.white,
+                                style: AppTextStyles.title.copyWith(
                                   fontSize: 18,
-                                  height: 1.2,
-                                  fontWeight: FontWeight.w800,
                                 ),
                               ),
                             ),
@@ -416,10 +413,9 @@ class _PreviewCard extends StatelessWidget {
                                     ),
                                     child: Text(
                                       value!,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w800,
+                                      style: AppTextStyles.metadata.copyWith(
+                                        color: AppColors.textPrimary,
+                                        fontWeight: AppTextStyles.strong,
                                       ),
                                     ),
                                   ),
@@ -433,11 +429,8 @@ class _PreviewCard extends StatelessWidget {
                           description,
                           maxLines: 4,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Color(0xBFFFFFFF),
-                            fontSize: 12,
-                            height: 1.4,
-                            fontWeight: FontWeight.w700,
+                          style: AppTextStyles.body.copyWith(
+                            color: AppColors.textSecondary,
                           ),
                         ),
                       ],

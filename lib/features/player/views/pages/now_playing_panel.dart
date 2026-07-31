@@ -268,21 +268,16 @@ class _NowPlayingPanelState extends State<NowPlayingPanel> {
                     widget.album.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: titleSize,
-                      fontWeight: FontWeight.w800,
-                    ),
+                    style: AppTextStyles.title.copyWith(fontSize: titleSize),
                   ),
                   SizedBox(height: tight ? 1 : 3),
                   Text(
                     widget.album.artist,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: const Color(0x99FFFFFF),
+                    style: AppTextStyles.body.copyWith(
+                      color: AppColors.textSecondary,
                       fontSize: artistSize,
-                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ],
@@ -301,10 +296,9 @@ class _NowPlayingPanelState extends State<NowPlayingPanel> {
                     widget.error,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Color(0xFFFFA8A8),
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
+                    style: AppTextStyles.micro.copyWith(
+                      color: AppColors.danger,
+                      fontWeight: AppTextStyles.strong,
                     ),
                   ),
                 ],
@@ -315,10 +309,9 @@ class _NowPlayingPanelState extends State<NowPlayingPanel> {
                       ? Text(
                           '$currentTime / $totalTime',
                           key: const ValueKey('seek-preview-time'),
-                          style: const TextStyle(
-                            color: Color(0xE6FFFFFF),
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
+                          style: AppTextStyles.metadata.copyWith(
+                            color: AppColors.textPrimary,
+                            fontWeight: AppTextStyles.strong,
                           ),
                         )
                       : Row(
@@ -343,7 +336,7 @@ class _NowPlayingPanelState extends State<NowPlayingPanel> {
                           : Icons.favorite_border_rounded,
                       tooltip: widget.isLiked ? '我喜欢' : '未喜欢',
                       active: widget.isLiked,
-                      activeColor: const Color(0xFFFF5C70),
+                      activeColor: AppColors.danger,
                       dimension: actionSize,
                       onPressed: widget.onLikedPressed,
                     ),
@@ -352,7 +345,7 @@ class _NowPlayingPanelState extends State<NowPlayingPanel> {
                       icon: Icons.lyrics_rounded,
                       tooltip: _showLyrics ? '封面' : '歌词',
                       active: _showLyrics,
-                      activeColor: const Color(0xFFB9A0FF),
+                      activeColor: AppColors.interaction,
                       dimension: actionSize,
                       onPressed: () => _toggleLyrics(),
                     ),
@@ -1124,7 +1117,7 @@ class _LyricsViewState extends State<_LyricsView>
     if (widget.isLoading) {
       return const Center(
         child: CircularProgressIndicator(
-          color: AppColors.accent,
+          color: AppColors.interaction,
           strokeWidth: 2,
         ),
       );
@@ -1135,9 +1128,10 @@ class _LyricsViewState extends State<_LyricsView>
         child: Text(
           '暂无歌词',
           style: TextStyle(
-            color: Color(0x99FFFFFF),
+            color: AppColors.textSecondary,
             fontSize: 14,
-            fontWeight: FontWeight.w700,
+            height: 19 / 14,
+            fontWeight: AppTextStyles.regular,
           ),
         ),
       );
@@ -1215,12 +1209,7 @@ class _LyricsTrackMetadata extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.right,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                  height: 1.1,
-                ),
+                style: AppTextStyles.label.copyWith(fontSize: 18, height: 1.1),
               ),
             ),
             const Padding(
@@ -1228,9 +1217,10 @@ class _LyricsTrackMetadata extends StatelessWidget {
               child: Text(
                 '·',
                 style: TextStyle(
-                  color: Color(0x66FFFFFF),
+                  color: AppColors.textMuted,
                   fontSize: 15,
-                  fontWeight: FontWeight.w700,
+                  height: 15 / 11,
+                  fontWeight: AppTextStyles.regular,
                 ),
               ),
             ),
@@ -1240,12 +1230,7 @@ class _LyricsTrackMetadata extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.left,
-                style: const TextStyle(
-                  color: Color(0xB3FFFFFF),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  height: 1.1,
-                ),
+                style: AppTextStyles.body.copyWith(height: 1.1),
               ),
             ),
           ],
@@ -1260,7 +1245,7 @@ class _ActionButton extends StatelessWidget {
     required this.icon,
     required this.tooltip,
     required this.active,
-    this.activeColor = const Color(0xFF31C27C),
+    this.activeColor = AppColors.interaction,
     this.dimension = 44,
     this.onPressed,
     super.key,
@@ -1275,7 +1260,7 @@ class _ActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = active ? activeColor : const Color(0xB3FFFFFF);
+    final color = active ? activeColor : AppColors.textSecondary;
     final iconSize = dimension <= 36 ? 18.0 : 22.0;
     return Tooltip(
       message: tooltip,
