@@ -155,8 +155,7 @@ class _FeaturePanelState extends State<FeaturePanel>
 
   @override
   Widget build(BuildContext context) {
-    final reduceMotion =
-        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final reduceMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
 
     Widget entrance({
       required Widget child,

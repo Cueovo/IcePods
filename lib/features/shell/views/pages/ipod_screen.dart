@@ -458,8 +458,7 @@ class _MenuPageTransitionState extends State<_MenuPageTransition> {
 
   @override
   Widget build(BuildContext context) {
-    final reduceMotion =
-        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final reduceMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
     final enteringOffset = reduceMotion
         ? Offset.zero
         : _isForward

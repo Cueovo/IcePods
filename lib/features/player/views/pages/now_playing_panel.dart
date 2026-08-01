@@ -106,8 +106,7 @@ class _NowPlayingPanelState extends State<NowPlayingPanel> {
     }
     final currentTime = _formatDuration(widget.position);
     final totalTime = _formatDuration(widget.duration);
-    final reduceMotion =
-        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final reduceMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
     return GestureDetector(
       key: const ValueKey('now-playing-swipe-area'),
       behavior: HitTestBehavior.opaque,
@@ -1187,8 +1186,7 @@ class _LyricsViewState extends State<_LyricsView>
     final target = (_activeIndex * _itemExtent(context))
         .clamp(position.minScrollExtent, position.maxScrollExtent)
         .toDouble();
-    final reduceMotion =
-        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final reduceMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
     if (animate && !reduceMotion) {
       final adjacent = (_activeIndex - _previousActiveIndex).abs() <= 1;
       _scrollController.animateTo(

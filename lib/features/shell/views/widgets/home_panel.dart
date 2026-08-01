@@ -93,7 +93,7 @@ class _HomePanelState extends State<HomePanel> {
     if (!mounted) {
       return;
     }
-    if (MediaQuery.maybeOf(context)?.disableAnimations ?? false) {
+    if (MediaQuery.maybeDisableAnimationsOf(context) ?? false) {
       _menuController.jumpTo(target);
       return;
     }
@@ -110,8 +110,7 @@ class _HomePanelState extends State<HomePanel> {
     final selectedValue = widget.valueForEntry?.call(selected);
     final selectedDescription =
         widget.descriptionForEntry?.call(selected) ?? selected.description;
-    final reduceMotion =
-        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final reduceMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
     // Content floats on ambient; no opaque sheet under the split.
     return Padding(
       // No fixed bottom reserve — list padding clears the glass curve instead.

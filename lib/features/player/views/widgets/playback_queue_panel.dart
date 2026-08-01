@@ -100,7 +100,7 @@ class _PlaybackQueuePanelState extends State<PlaybackQueuePanel> {
         return;
       }
       final reduceMotion =
-          MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+          MediaQuery.maybeDisableAnimationsOf(context) ?? false;
       if (reduceMotion) {
         _scrollController.jumpTo(target);
         return;
@@ -348,8 +348,7 @@ class _PlaybackQueueTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final reduceMotion =
-        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final reduceMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
     final textColor = current
         ? AppColors.interaction
         : selected

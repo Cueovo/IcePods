@@ -243,6 +243,9 @@ class ShellController extends ChangeNotifier {
       return;
     }
     final targetPage = _pageIndexFor(nextMode);
+    final currentPage = pageController.hasClients
+        ? (pageController.page ?? pageIndex.toDouble()).round()
+        : pageIndex;
     if (nextMode != PlayerMode.player) {
       inactivePlaybackProgress.value = music.playbackProgress.value;
     }
@@ -251,10 +254,11 @@ class ShellController extends ChangeNotifier {
     if (!pageController.hasClients) {
       return;
     }
-    // Every destination animates the same way; page distance never decides
-    // whether a route moves or teleports.
     final revision = ++_modeTransitionRevision;
-    if (reducedMotion) {
+    // Scrolling across a non-adjacent destination makes the PageView build and
+    // paint every page in between: menu → feature visibly flashed the player
+    // and paid for Cover Flow on the way. Those routes cut instead.
+    if (reducedMotion || (targetPage - currentPage).abs() > 1) {
       pageController.jumpToPage(targetPage);
       return;
     }
@@ -628,7 +632,8 @@ class ShellController extends ChangeNotifier {
     handleCenter();
   }
 
-  void stepSelection(int direction) {    _selectionClick();
+  void stepSelection(int direction) {
+    _selectionClick();
     _tick();
     if (mode == PlayerMode.menu) {
       final entries = currentMenuPage.entries;

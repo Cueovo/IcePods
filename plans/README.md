@@ -33,7 +33,9 @@ These plans are for the native Android/iOS app only. Web layout, browser interac
 ## Remaining work
 
 - Plan 009 is partially done. Still open: decomposing `ShellController` into per-concern listenables, a variable-extent lyric list, a pinned `NOW` queue card, and all device-side verification (DevTools frame/raster traces, TalkBack/VoiceOver, low-end Android).
-- Every plan's "feel check" and physical-device steps remain pending; nothing in 003–009 has been validated on real hardware yet.
+- Two pieces were reverted after the first device install, both recorded in their plan files: non-adjacent routes cut again instead of scrolling through intermediate pages (005), and Cover Flow is back to its fixed geometry and single decode size (007).
+- Re-attempting either needs the same guardrails: a transition stage that mounts only the outgoing and incoming surfaces, and a Cover Flow whose decode size stays constant while only its transform scales.
+- Every plan's "feel check" and remaining physical-device steps are still pending.
 
 ## Historical plans
 

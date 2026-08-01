@@ -69,6 +69,12 @@ Cover Flow must derive stage height, card size, reflection length, and side tran
 - `ClickWheel` accepts a `diameter`. The wheel stays authored at 300 and is scaled uniformly through `FittedBox`, so `_center`, `_ringHitMin`, the cardinal geometry, and hit testing all keep working in the authored space. The call site now derives the diameter from the wheel band with `wheelDiameterFor`, replacing the fixed `300 × 0.9`.
 - `HomePanel` takes a `railWidth`, clamps it to 132–190, and additionally caps it at 56% of the available width so the preview never collapses on a narrow glass.
 - `CoverFlowPanel` no longer uses the fixed 160/235 stage or 140px card. The stage is an `Expanded` region, the card is `min(stageHeight × .58, stageWidth × .42)` clamped to 72–168, and all 3D constants (105/25 translation, ±Z depth, 30px shadow) scale with the card. The reflection is clipped to a stage-relative floor plane, so it can no longer reach the metadata on a short viewport. Metadata width is `min(288, maxWidth - 24)`.
+
+### Reverted after device testing
+
+The Cover Flow rework above was rolled back to its pre-plan state. Deriving the card size from the stage also made `cacheWidth`/`cacheHeight` vary with layout, so every stage height produced a different decode of the same artwork instead of reusing one cached 144px image, and the reflection gained an extra `ClipRect` + `OverflowBox` layer per cover. On device that read as noticeably laggy. The panel is back to the fixed 140px card, fixed 144px decode and 160–235px stage; adapting it needs to keep a single decode size, so it should be re-attempted with the decode pinned and only the transform scaled.
+
+The rest of plan 007 (layout modes, `Flex` axis switch, bounded chassis, wheel diameter, menu rail) is unaffected and still in place.
 - Deviations, deliberate: the composition uses `Flex` rather than two separate trees, and tablet bounding is a `Center` + `ConstrainedBox` around the chassis content while the backdrop stays full-bleed, preserving the existing "chassis fills the device" behavior.
 - `flutter analyze`: `No issues found!`. `flutter test`: 57 tests passing, including layout coverage at 320×568, 360×800, 390×844, 430×932, 844×390, 1.3× text scale, landscape/portrait wheel placement, short-stage Cover Flow, and card scaling.
 - Physical-device checks still pending: landscape feel on a phone, tablet composition, and confirming the scaled wheel's semantic bounds with TalkBack.

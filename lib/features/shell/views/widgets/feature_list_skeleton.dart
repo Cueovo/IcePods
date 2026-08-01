@@ -21,8 +21,7 @@ class _FeatureListSkeletonState extends State<FeatureListSkeleton>
     super.didChangeDependencies();
     // Reduced motion gets a static skeleton: a repeating shimmer is exactly
     // the kind of continuous decoration the setting asks us to stop.
-    final reduceMotion =
-        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final reduceMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
     if (reduceMotion) {
       if (_animation.isAnimating) {
         _animation.stop();

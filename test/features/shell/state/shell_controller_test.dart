@@ -33,29 +33,44 @@ Future<ShellController> _pumpShell(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('non-adjacent modes animate instead of teleporting', (
+  testWidgets('non-adjacent modes cut instead of scrolling through pages', (
     tester,
   ) async {
     final shell = await _pumpShell(tester);
 
-    // Menu (page 0) to player (page 2) used to jump because the pages are
-    // more than one index apart.
+    // Menu (page 0) to player (page 2) must not scroll through Cover Flow:
+    // the PageView would build and flash every page in between.
     final flight = shell.switchMode(PlayerMode.player);
+    await tester.pump();
+
+    expect(shell.pageController.page, closeTo(2, 0.001));
+
+    await tester.pumpAndSettle();
+    await flight;
+
+    expect(shell.mode, PlayerMode.player);
+  });
+
+  testWidgets('adjacent modes animate between their pages', (tester) async {
+    final shell = await _pumpShell(tester);
+
+    // Menu (0) to Cover Flow (1) is adjacent, so it moves.
+    final flight = shell.switchMode(PlayerMode.coverFlow);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 140));
 
     final midFlight = shell.pageController.page!;
     expect(midFlight, greaterThan(0.0));
-    expect(midFlight, lessThan(2.0));
+    expect(midFlight, lessThan(1.0));
 
     await tester.pumpAndSettle();
     await flight;
 
-    expect(shell.pageController.page, closeTo(2, 0.001));
-    expect(shell.mode, PlayerMode.player);
+    expect(shell.pageController.page, closeTo(1, 0.001));
+    expect(shell.mode, PlayerMode.coverFlow);
   });
 
-  testWidgets('queue and player transitions move in both directions', (
+  testWidgets('queue and player transitions land on their pages', (
     tester,
   ) async {
     final shell = await _pumpShell(tester);
@@ -67,19 +82,11 @@ void main() {
     await toPlayer;
 
     final toQueue = shell.switchMode(PlayerMode.queue);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 140));
-    expect(shell.pageController.page, greaterThan(2.0));
-    expect(shell.pageController.page, lessThan(4.0));
     await tester.pumpAndSettle();
     await toQueue;
     expect(shell.pageController.page, closeTo(4, 0.001));
 
     final backToPlayer = shell.switchMode(PlayerMode.player);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 140));
-    expect(shell.pageController.page, lessThan(4.0));
-    expect(shell.pageController.page, greaterThan(2.0));
     await tester.pumpAndSettle();
     await backToPlayer;
     expect(shell.pageController.page, closeTo(2, 0.001));
@@ -91,7 +98,9 @@ void main() {
   ) async {
     final shell = await _pumpShell(tester);
 
-    final superseded = shell.switchMode(PlayerMode.player);
+    // Cover Flow is adjacent to the menu, so this one is a real flight that
+    // gets interrupted mid-air.
+    final superseded = shell.switchMode(PlayerMode.coverFlow);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 80));
     final retargeted = shell.switchMode(PlayerMode.queue);

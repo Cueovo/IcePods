@@ -143,8 +143,7 @@ class _AmbientBackgroundState extends State<AmbientBackground> {
   Widget build(BuildContext context) {
     final screenSize = MediaQuery.sizeOf(context);
     final pixelRatio = MediaQuery.devicePixelRatioOf(context);
-    final reduceMotion =
-        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final reduceMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
     final ambientShift = reduceMotion
         ? AppDurations.reducedMotion
         : AppDurations.quick;

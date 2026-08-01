@@ -7,7 +7,6 @@ import 'package:qqmusic_ipod/business/entities/music.dart';
 import 'package:qqmusic_ipod/business/repositories/music_repository.dart';
 import 'package:qqmusic_ipod/core/theme/widgets/click_wheel.dart';
 import 'package:qqmusic_ipod/core/utils/shell_layout_metrics.dart';
-import 'package:qqmusic_ipod/features/player/views/widgets/cover_flow_panel.dart';
 import 'package:qqmusic_ipod/features/shell/views/pages/ipod_screen.dart';
 
 Future<void> _pumpShell(
@@ -123,51 +122,6 @@ void main() {
 
       expect(wheel.top, greaterThanOrEqualTo(glass.bottom - 1));
       expect(wheel.width, lessThanOrEqualTo(390));
-    });
-  });
-
-  group('CoverFlowPanel', () {
-    testWidgets('keeps metadata visible in a short stage', (tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(
-            body: SizedBox(
-              width: 360,
-              height: 190,
-              child: CoverFlowPanel(selectedIndex: 1),
-            ),
-          ),
-        ),
-      );
-      await tester.pump();
-
-      expect(tester.takeException(), isNull);
-      expect(find.byType(CoverFlowPanel), findsOneWidget);
-    });
-
-    testWidgets('scales its covers with the available stage', (tester) async {
-      Future<double> cardWidth(Size size) async {
-        await tester.pumpWidget(
-          MaterialApp(
-            home: Scaffold(
-              body: SizedBox(
-                width: size.width,
-                height: size.height,
-                child: const CoverFlowPanel(selectedIndex: 1),
-              ),
-            ),
-          ),
-        );
-        await tester.pump();
-        return tester.getSize(find.byKey(const ValueKey('cover-1'))).width;
-      }
-
-      final small = await cardWidth(const Size(320, 220));
-      final large = await cardWidth(const Size(430, 360));
-
-      expect(small, lessThan(large));
-      expect(small, greaterThanOrEqualTo(72));
-      expect(large, lessThanOrEqualTo(168));
     });
   });
 }

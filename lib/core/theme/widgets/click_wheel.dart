@@ -185,8 +185,7 @@ class _ClickWheelState extends State<ClickWheel> {
   Widget build(BuildContext context) {
     // 经典的 iPod 按键暗灰色丝印颜色
     const labelColor = Color(0xFF6B6B73);
-    final reduceMotion =
-        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final reduceMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
 
     return SizedBox.square(
       dimension: widget.diameter,

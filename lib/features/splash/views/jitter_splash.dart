@@ -75,7 +75,7 @@ class _JitterSplashState extends State<_JitterSplash>
       return;
     }
     _started = true;
-    final reduced = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final reduced = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
     final compositionDuration = composition.duration;
     final playbackDuration =
         compositionDuration.inMilliseconds <= _splashPlaybackEnd.inMilliseconds
