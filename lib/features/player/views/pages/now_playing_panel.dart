@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
 import 'package:qqmusic_ipod/business/entities/music.dart';
+import 'package:qqmusic_ipod/core/theme/artwork/artwork_palette_builder.dart';
 import 'package:qqmusic_ipod/core/theme/tokens/app_tokens.dart';
 import 'package:qqmusic_ipod/core/theme/widgets/artwork_image.dart';
 import 'package:qqmusic_ipod/features/shell/models/ipod_models.dart';
@@ -288,6 +289,7 @@ class _NowPlayingPanelState extends State<NowPlayingPanel> {
                   isPlaying: widget.isPlaying,
                   isBuffering: widget.isBuffering,
                   isSeeking: widget.isSeeking,
+                  imageUrl: widget.album.imageUrl,
                   height: tight ? 22 : (compact ? 26 : 30),
                 ),
                 if (widget.error.isNotEmpty) ...[
@@ -525,6 +527,7 @@ class _PlayerProgressBar extends StatelessWidget {
     required this.isPlaying,
     required this.isBuffering,
     required this.isSeeking,
+    required this.imageUrl,
     this.height = 30,
   });
 
@@ -533,7 +536,25 @@ class _PlayerProgressBar extends StatelessWidget {
   final bool isPlaying;
   final bool isBuffering;
   final bool isSeeking;
+
+  /// Artwork the progress light borrows its colors from.
+  final String imageUrl;
   final double height;
+
+  /// Lifts an ambient color into a light trace that stays legible on glass.
+  static Color _trace(
+    Color base, {
+    required double lightness,
+    double hueShift = 0,
+    double saturation = .55,
+  }) {
+    final hsl = HSLColor.fromColor(base);
+    return hsl
+        .withHue((hsl.hue + hueShift) % 360)
+        .withSaturation(saturation.clamp(0.0, 1.0))
+        .withLightness(lightness)
+        .toColor();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -547,23 +568,46 @@ class _PlayerProgressBar extends StatelessWidget {
         child: SizedBox(
           height: height,
           width: double.infinity,
-          child: TweenAnimationBuilder<Offset>(
-            tween: Tween<Offset>(
-              begin: Offset(value, phase),
-              end: Offset(value, phase),
-            ),
-            duration: isSeeking ? AppDurations.quick : AppDurations.standard,
-            curve: AppCurves.standard,
-            builder: (context, visualState, child) {
-              return CustomPaint(
-                key: const ValueKey('player-progress-paint'),
-                painter: _PlayerProgressPainter(
-                  progress: visualState.dx,
-                  animationPhase: visualState.dy,
-                  isPlaying: isPlaying,
-                  isBuffering: isBuffering,
-                  isSeeking: isSeeking,
+          child: ArtworkPaletteBuilder(
+            imageUrl: imageUrl,
+            builder: (context, palette) {
+              // The trace is the album's light, not a fixed violet signature.
+              final primary = _trace(palette.primary, lightness: .62);
+              final secondary = _trace(
+                palette.primary,
+                lightness: .66,
+                hueShift: 28,
+                saturation: .5,
+              );
+              final pearl = _trace(
+                palette.primary,
+                lightness: .88,
+                saturation: .32,
+              );
+              return TweenAnimationBuilder<Offset>(
+                tween: Tween<Offset>(
+                  begin: Offset(value, phase),
+                  end: Offset(value, phase),
                 ),
+                duration: isSeeking
+                    ? AppDurations.quick
+                    : AppDurations.standard,
+                curve: AppCurves.standard,
+                builder: (context, visualState, child) {
+                  return CustomPaint(
+                    key: const ValueKey('player-progress-paint'),
+                    painter: _PlayerProgressPainter(
+                      progress: visualState.dx,
+                      animationPhase: visualState.dy,
+                      isPlaying: isPlaying,
+                      isBuffering: isBuffering,
+                      isSeeking: isSeeking,
+                      primary: primary,
+                      secondary: secondary,
+                      pearl: pearl,
+                    ),
+                  );
+                },
               );
             },
           ),
@@ -580,6 +624,9 @@ class _PlayerProgressPainter extends CustomPainter {
     required this.isPlaying,
     required this.isBuffering,
     required this.isSeeking,
+    required this.primary,
+    required this.secondary,
+    required this.pearl,
   });
 
   final double progress;
@@ -587,6 +634,9 @@ class _PlayerProgressPainter extends CustomPainter {
   final bool isPlaying;
   final bool isBuffering;
   final bool isSeeking;
+  final Color primary;
+  final Color secondary;
+  final Color pearl;
 
   /// Wave only on the unplayed side of [progressX]. Amplitude is 0 at the
   /// playhead and ramps up after it, so the curve looks sucked into the dot.
@@ -702,8 +752,12 @@ class _PlayerProgressPainter extends CustomPainter {
     final y = bounds.center.dy;
     // Flat played track — no vertical motion so the head never looks offset.
     final glow = Paint()
-      ..shader = const LinearGradient(
-        colors: [Color(0x668A4FFF), Color(0x994A8CFF), Color(0xB3E6CFFF)],
+      ..shader = LinearGradient(
+        colors: [
+          primary.withValues(alpha: .4),
+          secondary.withValues(alpha: .6),
+          pearl.withValues(alpha: .7),
+        ],
       ).createShader(Rect.fromLTRB(bounds.left, y - 4, endX, y + 4))
       ..strokeWidth = emphasized ? 4.2 : 3.4
       ..strokeCap = StrokeCap.round
@@ -711,8 +765,8 @@ class _PlayerProgressPainter extends CustomPainter {
     canvas.drawLine(Offset(bounds.left, y), Offset(endX, y), glow);
 
     final core = Paint()
-      ..shader = const LinearGradient(
-        colors: [Color(0xFF8A4FFF), Color(0xFF4A8CFF), Color(0xFFE6CFFF)],
+      ..shader = LinearGradient(
+        colors: [primary, secondary, pearl],
       ).createShader(Rect.fromLTRB(bounds.left, y - 2, endX, y + 2))
       ..strokeWidth = emphasized ? 2.6 : 2.15
       ..strokeCap = StrokeCap.round;
@@ -783,21 +837,21 @@ class _PlayerProgressPainter extends CustomPainter {
     _drawUnplayedWave(
       canvas,
       purplePath,
-      color: const Color(0xFF8A4FFF),
+      color: primary,
       strokeWidth: 2,
       baseOpacity: .38,
     );
     _drawUnplayedWave(
       canvas,
       bluePath,
-      color: const Color(0xFF4A8CFF),
+      color: secondary,
       strokeWidth: 1.55,
       baseOpacity: .32,
     );
     _drawUnplayedWave(
       canvas,
       pearlPath,
-      color: const Color(0xFFE6CFFF),
+      color: pearl,
       strokeWidth: 1.1,
       baseOpacity: .46,
     );
@@ -828,7 +882,10 @@ class _PlayerProgressPainter extends CustomPainter {
         animationPhase != oldDelegate.animationPhase ||
         isPlaying != oldDelegate.isPlaying ||
         isBuffering != oldDelegate.isBuffering ||
-        isSeeking != oldDelegate.isSeeking;
+        isSeeking != oldDelegate.isSeeking ||
+        primary != oldDelegate.primary ||
+        secondary != oldDelegate.secondary ||
+        pearl != oldDelegate.pearl;
   }
 }
 

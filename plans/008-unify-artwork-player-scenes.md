@@ -1,7 +1,7 @@
 # 008 — Make Now Playing, Cover Flow, and Queue One Artwork Scene
 
-- **Status**: TODO
-- **Commit**: 60c800d
+- **Status**: IMPLEMENTED
+- **Commit**: pending
 - **Severity**: HIGH
 - **Category**: Missed opportunities; Cohesion; Physicality & origin
 - **Estimated scope**: 6 source files, medium-to-large visual refactor
@@ -73,3 +73,21 @@ Queue target:
 - **Interaction**: VIP badge and queue error remain visible after a blocked VIP selection.
 - **Reduced motion**: shared artwork uses opacity-only replacement with no spatial flight.
 - **Done when**: the three signature surfaces read as states of one music scene rather than separate feature widgets.
+
+## Execution result
+
+- `ArtworkIdentity` (`lib/core/theme/artwork/artwork_identity.dart`) carries the scene's artwork key and URL, and owns the canonical `resolveArtworkUrl` so the image cache and the palette cache can never split on the http/https QQ host.
+- `ShellController.artworkIdentity` resolves the identity per scene: the highlighted cover in Cover Flow, otherwise the playing song, otherwise the local display album.
+- `ArtworkPaletteBuilder` reads the shared palette cache synchronously when it is warm and samples once when it is cold, so any surface can paint with the album's colors without re-decoding or waiting on the first frame.
+- The queue is no longer a generic list on a fixed green backdrop:
+  - queue mode now renders `AmbientBackground` from the album instead of `theme.featureGlow`; only feature pages keep the service glow;
+  - the header tile shows the playing artwork with a palette-derived surround, falling back to the queue glyph when there is none;
+  - rows carry `NOW` and `NEXT` badges, already-played rows recede to 62% opacity, and the semantic label now says 下一首 / 已播放 so the timeline is audible as well as visible.
+- The Now Playing progress trace is derived from the artwork palette: the played gradient, the three unplayed waves, and the glow all come from the album hue lifted into a legible light trace, replacing the fixed violet/blue/pearl signature. `shouldRepaint` compares the colors.
+- Queue behavior is untouched: order, `playbackError`, VIP badges, selection semantics, remove availability, and the 52px/58px row geometry are all preserved.
+- Deviations, deliberate:
+  - Identity flows from the shell to the queue, while Now Playing derives the same identity from the album it already receives; the palette itself is resolved per surface through the shared cache instead of being pushed through the controller, because sampling is asynchronous and the controller should not hold frame-driving state.
+  - A true Hero-style shared-element flight across the `PageView` is not implemented. Surfaces instead share one artwork key, one decoded image and one palette, which removes cross-fades between unrelated artwork; the geometric flight is left for a later pass rather than destabilising the page controller.
+  - The current track was not pulled out into a pinned card above the list. It stays in the list with `NOW` emphasis, so wheel selection indices and the queue's fixed-extent geometry keep working; a pinned card belongs with the variable-extent work in plan 009.
+- `flutter analyze`: `No issues found!`. `flutter test`: 62 tests passing, including identity stability, NOW/NEXT badges, played-row recession, and header artwork with and without an identity.
+- Physical-device checks still pending: Cover Flow → player → queue with one track, and a visual pass over bright artwork.

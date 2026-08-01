@@ -9,7 +9,7 @@ These plans are for the native Android/iOS app only. Web layout, browser interac
 | 005 | [Unify native scene motion and page transitions](005-unify-native-scene-motion.md) | HIGH | IMPLEMENTED |
 | 006 | [Give the Click Wheel physical response](006-click-wheel-material-feedback.md) | HIGH | IMPLEMENTED |
 | 007 | [Create native portrait and landscape compositions](007-native-responsive-composition.md) | HIGH | IMPLEMENTED |
-| 008 | [Make Now Playing, Cover Flow, and Queue one artwork scene](008-unify-artwork-player-scenes.md) | HIGH | TODO |
+| 008 | [Make Now Playing, Cover Flow, and Queue one artwork scene](008-unify-artwork-player-scenes.md) | HIGH | IMPLEMENTED |
 | 009 | [Isolate native rebuilds and harden accessibility](009-native-performance-accessibility.md) | HIGH | TODO |
 
 ## Recommended execution order

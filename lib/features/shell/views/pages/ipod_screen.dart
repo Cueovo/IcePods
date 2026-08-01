@@ -238,9 +238,11 @@ class _IpodShellView extends StatelessWidget {
                                   fit: StackFit.expand,
                                   children: [
                                     // Ambient / glow only inside the screen.
+                                    // Feature pages keep the service glow;
+                                    // playback surfaces, queue included, show
+                                    // the album's own light.
                                     if (!shell.hasCustomBackground &&
-                                        (shell.mode == PlayerMode.feature ||
-                                            shell.mode == PlayerMode.queue))
+                                        shell.mode == PlayerMode.feature)
                                       DecoratedBox(
                                         decoration: BoxDecoration(
                                           gradient: RadialGradient(
@@ -326,6 +328,7 @@ class _IpodShellView extends StatelessWidget {
                                               PlaybackQueuePanel(
                                                 queue:
                                                     shell.music.playbackQueue,
+                                                identity: shell.artworkIdentity,
                                                 currentIndex: shell
                                                     .music
                                                     .currentPlaybackQueueIndex,

@@ -10,6 +10,7 @@ import 'package:qqmusic_ipod/core/audio/click_sound_service.dart';
 import 'package:qqmusic_ipod/core/storage/app_settings_store.dart';
 import 'package:qqmusic_ipod/core/storage/chassis_color_store.dart';
 import 'package:qqmusic_ipod/core/storage/custom_background_picker.dart';
+import 'package:qqmusic_ipod/core/theme/artwork/artwork_identity.dart';
 import 'package:qqmusic_ipod/core/theme/tokens/app_tokens.dart';
 import 'package:qqmusic_ipod/features/player/state/controller.dart';
 import 'package:qqmusic_ipod/features/shell/models/ipod_models.dart';
@@ -180,6 +181,28 @@ class ShellController extends ChangeNotifier {
   };
 
   bool get hasCustomBackground => customBackgroundPath?.isNotEmpty == true;
+
+  /// Artwork of the current scene, shared by Cover Flow, the player and the
+  /// queue so they all describe the same album.
+  ArtworkIdentity get artworkIdentity {
+    if (mode == PlayerMode.coverFlow) {
+      final albums = coverAlbums;
+      if (albums.isEmpty) {
+        return ArtworkIdentity.empty;
+      }
+      return ArtworkIdentity.album(
+        albums[coverIndex.clamp(0, albums.length - 1)],
+      );
+    }
+    final song = music.currentSong;
+    if (song != null) {
+      return ArtworkIdentity(key: 'song:${song.id}', imageUrl: song.imageUrl);
+    }
+    final album = displayAlbum;
+    return album.imageUrl.isEmpty
+        ? ArtworkIdentity.empty
+        : ArtworkIdentity.album(album);
+  }
 
   bool get wheelIsPlaying =>
       music.currentSong == null ? isPlayingLocally : music.isPlaying;

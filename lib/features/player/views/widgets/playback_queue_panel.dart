@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import 'package:qqmusic_ipod/business/entities/music.dart';
+import 'package:qqmusic_ipod/core/theme/artwork/artwork_identity.dart';
+import 'package:qqmusic_ipod/core/theme/artwork/artwork_palette_builder.dart';
 import 'package:qqmusic_ipod/core/theme/tokens/app_tokens.dart';
 import 'package:qqmusic_ipod/core/theme/widgets/artwork_image.dart';
 import 'package:qqmusic_ipod/core/theme/widgets/ipod_scrollbar.dart';
@@ -12,6 +14,7 @@ class PlaybackQueuePanel extends StatefulWidget {
     required this.currentIndex,
     required this.selectedIndex,
     required this.isPlaying,
+    this.identity = ArtworkIdentity.empty,
     this.playbackError = '',
     required this.onPlayIndex,
     required this.onRemoveIndex,
@@ -23,6 +26,9 @@ class PlaybackQueuePanel extends StatefulWidget {
   final int currentIndex;
   final int selectedIndex;
   final bool isPlaying;
+
+  /// Artwork of the playing track, shared with the player and Cover Flow.
+  final ArtworkIdentity identity;
   final String playbackError;
   final ValueChanged<int> onPlayIndex;
   final ValueChanged<int> onRemoveIndex;
@@ -116,30 +122,7 @@ class _PlaybackQueuePanelState extends State<PlaybackQueuePanel> {
             Row(
               key: const ValueKey('playback-queue-header'),
               children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [AppColors.interaction, AppColors.canvas],
-                    ),
-                    borderRadius: BorderRadius.circular(AppRadii.artwork),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x28000000),
-                        blurRadius: 12,
-                        offset: Offset(0, 5),
-                      ),
-                    ],
-                  ),
-                  child: const Icon(
-                    Icons.queue_music_rounded,
-                    size: 24,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
+                _QueueHeaderArtwork(identity: widget.identity),
                 const SizedBox(width: 11),
                 Expanded(
                   child: Column(
@@ -252,6 +235,8 @@ class _PlaybackQueuePanelState extends State<PlaybackQueuePanel> {
                                 item: item,
                                 selected: index == widget.selectedIndex,
                                 current: index == widget.currentIndex,
+                                isNext: index == widget.currentIndex + 1,
+                                played: index < widget.currentIndex,
                                 isPlaying: widget.isPlaying,
                                 onTap: () => widget.onPlayIndex(index),
                                 onRemove: index == widget.currentIndex
@@ -271,12 +256,68 @@ class _PlaybackQueuePanelState extends State<PlaybackQueuePanel> {
   }
 }
 
+/// Header artwork of the queue: the album currently playing, so the queue
+/// reads as a continuation of the player instead of a generic list.
+class _QueueHeaderArtwork extends StatelessWidget {
+  const _QueueHeaderArtwork({required this.identity});
+
+  final ArtworkIdentity identity;
+
+  @override
+  Widget build(BuildContext context) {
+    return ArtworkPaletteBuilder(
+      imageUrl: identity.imageUrl,
+      builder: (context, palette) {
+        return Container(
+          key: const ValueKey('queue-header-artwork'),
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [palette.primary, palette.secondary],
+            ),
+            borderRadius: BorderRadius.circular(AppRadii.artwork),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x28000000),
+                blurRadius: 12,
+                offset: Offset(0, 5),
+              ),
+            ],
+          ),
+          child: identity.isEmpty
+              ? const Icon(
+                  Icons.queue_music_rounded,
+                  size: 24,
+                  color: AppColors.textPrimary,
+                )
+              : ClipRRect(
+                  borderRadius: BorderRadius.circular(AppRadii.artwork),
+                  child: ArtworkImage(
+                    imageUrl: identity.imageUrl,
+                    backgroundColor: Colors.transparent,
+                    cacheWidth: 48,
+                    cacheHeight: 48,
+                    fadeIn: false,
+                    filterQuality: FilterQuality.low,
+                  ),
+                ),
+        );
+      },
+    );
+  }
+}
+
 class _PlaybackQueueTile extends StatelessWidget {
   const _PlaybackQueueTile({
     required this.index,
     required this.item,
     required this.selected,
     required this.current,
+    required this.isNext,
+    required this.played,
     required this.isPlaying,
     required this.onTap,
     required this.onRemove,
@@ -287,6 +328,8 @@ class _PlaybackQueueTile extends StatelessWidget {
   final QqMusicItem item;
   final bool selected;
   final bool current;
+  final bool isNext;
+  final bool played;
   final bool isPlaying;
   final VoidCallback onTap;
   final VoidCallback? onRemove;
@@ -302,6 +345,10 @@ class _PlaybackQueueTile extends StatelessWidget {
         : AppColors.textSecondary;
     final stateLabel = current
         ? (isPlaying ? '正在播放' : '当前歌曲')
+        : isNext
+        ? '下一首'
+        : played
+        ? '已播放，队列第 ${index + 1} 首'
         : '队列第 ${index + 1} 首';
     return Semantics(
       button: true,
@@ -313,153 +360,212 @@ class _PlaybackQueueTile extends StatelessWidget {
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(AppRadii.tile),
-          child: AnimatedContainer(
+          // Played tracks recede so the list reads as a timeline around NOW.
+          child: AnimatedOpacity(
             duration: reduceMotion
                 ? AppDurations.reducedMotion
                 : AppDurations.quick,
-            curve: AppCurves.standard,
-            height: 52,
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            decoration: BoxDecoration(
-              color: current
-                  ? AppColors.interactionSoft
-                  : selected
-                  ? AppColors.surfaceSelected
-                  : AppColors.surface,
-              borderRadius: BorderRadius.circular(AppRadii.tile),
-              border: Border.all(
+            curve: AppCurves.strongEaseOut,
+            opacity: played && !selected ? .62 : 1,
+            child: AnimatedContainer(
+              duration: reduceMotion
+                  ? AppDurations.reducedMotion
+                  : AppDurations.quick,
+              curve: AppCurves.standard,
+              height: 52,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              decoration: BoxDecoration(
                 color: current
-                    ? AppColors.interactionBorder
-                    : selected
                     ? AppColors.interactionSoft
-                    : Colors.transparent,
+                    : selected
+                    ? AppColors.surfaceSelected
+                    : AppColors.surface,
+                borderRadius: BorderRadius.circular(AppRadii.tile),
+                border: Border.all(
+                  color: current
+                      ? AppColors.interactionBorder
+                      : selected
+                      ? AppColors.interactionSoft
+                      : Colors.transparent,
+                ),
               ),
-            ),
-            child: Row(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(9),
-                  child: SizedBox.square(
-                    key: ValueKey('queue-artwork-$index-${item.id}'),
-                    dimension: 38,
-                    child: item.imageUrl.isEmpty
-                        ? const ColoredBox(
-                            color: Color(0xFF303037),
-                            child: Icon(
-                              Icons.music_note_rounded,
-                              color: AppColors.textSecondary,
-                              size: 20,
+              child: Row(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(9),
+                    child: SizedBox.square(
+                      key: ValueKey('queue-artwork-$index-${item.id}'),
+                      dimension: 38,
+                      child: item.imageUrl.isEmpty
+                          ? const ColoredBox(
+                              color: Color(0xFF303037),
+                              child: Icon(
+                                Icons.music_note_rounded,
+                                color: AppColors.textSecondary,
+                                size: 20,
+                              ),
+                            )
+                          : ArtworkImage(
+                              imageUrl: item.imageUrl,
+                              cacheWidth: 38,
+                              cacheHeight: 38,
+                              fadeIn: false,
+                              filterQuality: FilterQuality.low,
                             ),
-                          )
-                        : ArtworkImage(
-                            imageUrl: item.imageUrl,
-                            cacheWidth: 38,
-                            cacheHeight: 38,
-                            fadeIn: false,
-                            filterQuality: FilterQuality.low,
-                          ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              item.title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: AppTextStyles.body.copyWith(
-                                color: textColor,
-                                fontWeight: current || selected
-                                    ? AppTextStyles.strong
-                                    : AppTextStyles.regular,
-                              ),
-                            ),
-                          ),
-                          if (item.isSong && item.requiresVip) ...[
-                            const SizedBox(width: 5),
-                            Container(
-                              key: ValueKey(
-                                'queue-vip-badge-$index-${item.id}',
-                              ),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 4,
-                                vertical: 1,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppColors.vip.withValues(alpha: .15),
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(
-                                  color: AppColors.vip.withValues(alpha: .75),
-                                  width: .7,
-                                ),
-                              ),
-                              child: const Text(
-                                'VIP',
-                                style: TextStyle(
-                                  color: AppColors.vip,
-                                  fontSize: 8,
-                                  fontWeight: AppTextStyles.strong,
-                                  height: 1.1,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                      if (item.subtitle.isNotEmpty) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          item.subtitle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTextStyles.metadata.copyWith(
-                            color: AppColors.textMuted,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                if (current)
-                  Icon(
-                    isPlaying
-                        ? Icons.graphic_eq_rounded
-                        : Icons.pause_circle_filled_rounded,
-                    color: AppColors.interaction,
-                    size: 20,
-                  )
-                else if (onRemove != null)
-                  Semantics(
-                    button: true,
-                    label: '从队列移除 ${item.title}',
-                    child: IconButton(
-                      key: ValueKey('queue-remove-$index-${item.id}'),
-                      tooltip: '从队列移除',
-                      onPressed: onRemove,
-                      constraints: const BoxConstraints.tightFor(
-                        width: 40,
-                        height: 40,
-                      ),
-                      padding: EdgeInsets.zero,
-                      splashRadius: 18,
-                      icon: Icon(
-                        Icons.close_rounded,
-                        color: selected
-                            ? AppColors.interaction
-                            : AppColors.textMuted,
-                        size: 18,
-                      ),
                     ),
                   ),
-              ],
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            if (current || isNext)
+                              Padding(
+                                padding: const EdgeInsets.only(right: 5),
+                                child: _QueueStageBadge(
+                                  key: ValueKey(
+                                    current
+                                        ? 'queue-now-badge-${item.id}'
+                                        : 'queue-next-badge-${item.id}',
+                                  ),
+                                  label: current ? 'NOW' : 'NEXT',
+                                  emphasized: current,
+                                ),
+                              ),
+                            Flexible(
+                              child: Text(
+                                item.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTextStyles.body.copyWith(
+                                  color: textColor,
+                                  fontWeight: current || selected
+                                      ? AppTextStyles.strong
+                                      : AppTextStyles.regular,
+                                ),
+                              ),
+                            ),
+                            if (item.isSong && item.requiresVip) ...[
+                              const SizedBox(width: 5),
+                              Container(
+                                key: ValueKey(
+                                  'queue-vip-badge-$index-${item.id}',
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                  vertical: 1,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.vip.withValues(alpha: .15),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                    color: AppColors.vip.withValues(alpha: .75),
+                                    width: .7,
+                                  ),
+                                ),
+                                child: const Text(
+                                  'VIP',
+                                  style: TextStyle(
+                                    color: AppColors.vip,
+                                    fontSize: 8,
+                                    fontWeight: AppTextStyles.strong,
+                                    height: 1.1,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        if (item.subtitle.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            item.subtitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTextStyles.metadata.copyWith(
+                              color: AppColors.textMuted,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  if (current)
+                    Icon(
+                      isPlaying
+                          ? Icons.graphic_eq_rounded
+                          : Icons.pause_circle_filled_rounded,
+                      color: AppColors.interaction,
+                      size: 20,
+                    )
+                  else if (onRemove != null)
+                    Semantics(
+                      button: true,
+                      label: '从队列移除 ${item.title}',
+                      child: IconButton(
+                        key: ValueKey('queue-remove-$index-${item.id}'),
+                        tooltip: '从队列移除',
+                        onPressed: onRemove,
+                        constraints: const BoxConstraints.tightFor(
+                          width: 40,
+                          height: 40,
+                        ),
+                        padding: EdgeInsets.zero,
+                        splashRadius: 18,
+                        icon: Icon(
+                          Icons.close_rounded,
+                          color: selected
+                              ? AppColors.interaction
+                              : AppColors.textMuted,
+                          size: 18,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// `NOW` / `NEXT` marker that turns the queue into a temporal sequence.
+class _QueueStageBadge extends StatelessWidget {
+  const _QueueStageBadge({
+    required this.label,
+    required this.emphasized,
+    super.key,
+  });
+
+  final String label;
+  final bool emphasized;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = emphasized ? AppColors.interaction : AppColors.textSecondary;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: emphasized ? .2 : .12),
+        borderRadius: BorderRadius.circular(AppRadii.badge),
+        border: Border.all(
+          color: color.withValues(alpha: emphasized ? .7 : .4),
+          width: .7,
+        ),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 8,
+          fontWeight: AppTextStyles.strong,
+          letterSpacing: .4,
+          height: 1.1,
         ),
       ),
     );
