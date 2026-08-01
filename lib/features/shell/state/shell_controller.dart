@@ -10,6 +10,7 @@ import 'package:qqmusic_ipod/core/audio/click_sound_service.dart';
 import 'package:qqmusic_ipod/core/storage/app_settings_store.dart';
 import 'package:qqmusic_ipod/core/storage/chassis_color_store.dart';
 import 'package:qqmusic_ipod/core/storage/custom_background_picker.dart';
+import 'package:qqmusic_ipod/core/theme/tokens/app_tokens.dart';
 import 'package:qqmusic_ipod/features/player/state/controller.dart';
 import 'package:qqmusic_ipod/features/shell/models/ipod_models.dart';
 import 'package:qqmusic_ipod/features/shell/models/menu_catalog.dart';
@@ -74,6 +75,17 @@ class ShellController extends ChangeNotifier {
   AppSleepTimer sleepTimer = AppSleepTimer.off;
   String? customBackgroundPath;
 
+  /// Mirrors [MediaQueryData.disableAnimations] so controller-driven motion
+  /// follows the same policy as the widgets.
+  bool reducedMotion = false;
+  int _modeTransitionRevision = 0;
+
+  /// Updates the motion policy. Deliberately silent: the shell reads this in
+  /// the same build pass, and a media query change already rebuilds the shell.
+  void syncReducedMotion(bool value) {
+    reducedMotion = value;
+  }
+
   MenuPage get currentMenuPage => qqMusicMenuPages[menuPath.last]!;
 
   int get menuIndex => menuIndices[currentMenuPage.section] ?? 0;
@@ -123,7 +135,9 @@ class ShellController extends ChangeNotifier {
 
   int queueIndex = 0;
 
-  int get pageIndex => switch (mode) {
+  int get pageIndex => _pageIndexFor(mode);
+
+  int _pageIndexFor(PlayerMode value) => switch (value) {
     PlayerMode.menu => 0,
     PlayerMode.coverFlow => 1,
     PlayerMode.player => 2,
@@ -205,30 +219,36 @@ class ShellController extends ChangeNotifier {
     if (mode == nextMode) {
       return;
     }
-    final targetPage = switch (nextMode) {
-      PlayerMode.menu => 0,
-      PlayerMode.coverFlow => 1,
-      PlayerMode.player => 2,
-      PlayerMode.feature => 3,
-      PlayerMode.queue => 4,
-    };
-    final currentPage = pageController.hasClients
-        ? (pageController.page ?? pageIndex.toDouble()).round()
-        : pageIndex;
+    final targetPage = _pageIndexFor(nextMode);
     if (nextMode != PlayerMode.player) {
       inactivePlaybackProgress.value = music.playbackProgress.value;
     }
     mode = nextMode;
     notifyListeners();
-    if ((targetPage - currentPage).abs() > 1) {
+    if (!pageController.hasClients) {
+      return;
+    }
+    // Every destination animates the same way; page distance never decides
+    // whether a route moves or teleports.
+    final revision = ++_modeTransitionRevision;
+    if (reducedMotion) {
       pageController.jumpToPage(targetPage);
       return;
     }
     await pageController.animateToPage(
       targetPage,
-      duration: const Duration(milliseconds: 550),
-      curve: const Cubic(.25, 1, .25, 1),
+      duration: AppDurations.scene,
+      curve: AppCurves.sceneEase,
     );
+    if (revision != _modeTransitionRevision || !pageController.hasClients) {
+      // A newer destination superseded this flight and owns the final page.
+      return;
+    }
+    final authoritativePage = _pageIndexFor(mode);
+    if ((pageController.page ?? authoritativePage).round() !=
+        authoritativePage) {
+      pageController.jumpToPage(authoritativePage);
+    }
   }
 
   void _tick() {

@@ -42,7 +42,7 @@ abstract final class AppDurations {
   static const splashExit = Duration(milliseconds: 260);
   static const menuPage = Duration(milliseconds: 240);
   static const scene = Duration(milliseconds: 280);
-  static const reducedMotion = Duration(milliseconds: 200);
+  static const reducedMotion = Duration(milliseconds: 120);
   static const standard = Duration(milliseconds: 300);
   static const emphasized = Duration(milliseconds: 420);
   static const lyricLine = Duration(milliseconds: 480);

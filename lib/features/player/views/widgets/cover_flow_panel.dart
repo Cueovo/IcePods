@@ -27,6 +27,8 @@ class CoverFlowPanel extends StatelessWidget {
     }
     final safeIndex = selectedIndex.clamp(0, albums.length - 1);
     final album = albums[safeIndex];
+    final reduceMotion =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
 
     const renderRadius = 4;
     final firstVisible = math.max(0, safeIndex - renderRadius);
@@ -68,6 +70,7 @@ class CoverFlowPanel extends StatelessWidget {
                         key: ValueKey('cover-$index'),
                         album: albums[index],
                         offset: index - safeIndex,
+                        reduceMotion: reduceMotion,
                       ),
                   ],
                 ),
@@ -75,13 +78,20 @@ class CoverFlowPanel extends StatelessWidget {
             ),
             SizedBox(height: metaGap),
             AnimatedSwitcher(
-              duration: AppDurations.standard,
+              duration: reduceMotion
+                  ? AppDurations.reducedMotion
+                  : AppDurations.quick,
+              switchInCurve: AppCurves.sceneEase,
+              switchOutCurve: AppCurves.sceneEase,
               transitionBuilder: (child, animation) {
+                if (reduceMotion) {
+                  return FadeTransition(opacity: animation, child: child);
+                }
                 return FadeTransition(
                   opacity: animation,
                   child: SlideTransition(
                     position: Tween<Offset>(
-                      begin: const Offset(0, 0.3),
+                      begin: const Offset(0, 0.18),
                       end: Offset.zero,
                     ).animate(animation),
                     child: child,
@@ -120,10 +130,16 @@ class CoverFlowPanel extends StatelessWidget {
 }
 
 class _CoverFlowItem extends StatelessWidget {
-  const _CoverFlowItem({required this.album, required this.offset, super.key});
+  const _CoverFlowItem({
+    required this.album,
+    required this.offset,
+    required this.reduceMotion,
+    super.key,
+  });
 
   final Album album;
   final int offset;
+  final bool reduceMotion;
 
   @override
   Widget build(BuildContext context) {
@@ -131,8 +147,8 @@ class _CoverFlowItem extends StatelessWidget {
 
     return TweenAnimationBuilder<double>(
       tween: Tween<double>(end: targetOffset),
-      duration: AppDurations.emphasized,
-      curve: AppCurves.standard,
+      duration: reduceMotion ? Duration.zero : AppDurations.emphasized,
+      curve: AppCurves.movementEase,
       builder: (context, animatedOffset, child) {
         final distance = animatedOffset.abs();
         final direction = animatedOffset.sign;
@@ -148,11 +164,16 @@ class _CoverFlowItem extends StatelessWidget {
 
         // 2. Flutter 的 Z 轴方向与 CSS 透视相反，因此 rotateY 也要反号。
         // 右侧使用正角度，让右边缘朝镜头抬起；左侧保持镜像。
-        final rotateY = direction * sideProgress * 65.0 * math.pi / 180.0;
+        // Reduced motion keeps the covers flat instead of rotating them in 3D.
+        final rotateY = reduceMotion
+            ? 0.0
+            : direction * sideProgress * 65.0 * math.pi / 180.0;
 
         // 3. Z轴深度：Flutter 中负数代表弹出，正数代表后退。
         // 中心弹出 (-50)，侧面后退 (+40)，更远处的继续后退 (+40)
-        final translateZ = -50.0 + sideProgress * 90.0 + extraDistance * 40.0;
+        final translateZ = reduceMotion
+            ? 0.0
+            : -50.0 + sideProgress * 90.0 + extraDistance * 40.0;
 
         // 4. 缩放比例
         final scale = 1.15 - sideProgress * 0.25;

@@ -1093,12 +1093,14 @@ class _LyricsViewState extends State<_LyricsView>
     final target = (_activeIndex * _itemExtent)
         .clamp(position.minScrollExtent, position.maxScrollExtent)
         .toDouble();
-    if (animate) {
+    final reduceMotion =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    if (animate && !reduceMotion) {
       final adjacent = (_activeIndex - _previousActiveIndex).abs() <= 1;
       _scrollController.animateTo(
         target,
         duration: adjacent ? AppDurations.lyricScroll : AppDurations.emphasized,
-        curve: adjacent ? AppCurves.lyricScroll : AppCurves.standard,
+        curve: adjacent ? AppCurves.lyricScroll : AppCurves.movementEase,
       );
     } else {
       _scrollController.jumpTo(target);

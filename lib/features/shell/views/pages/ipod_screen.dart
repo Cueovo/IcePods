@@ -124,6 +124,9 @@ class _IpodShellView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
+    // One motion policy: the controller drives page flights with the same
+    // reduced-motion setting the widgets read.
+    shell.syncReducedMotion(media.disableAnimations);
     // Outer / bezel adapt so punch-holes sit inside the top bezel band.
     final chassisInsets = ChassisInsets.resolve(media);
     final keyboardVisible = media.viewInsets.bottom > 0;

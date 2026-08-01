@@ -1,0 +1,147 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:qqmusic_ipod/business/entities/auth.dart';
+import 'package:qqmusic_ipod/business/entities/music.dart';
+import 'package:qqmusic_ipod/business/repositories/music_repository.dart';
+import 'package:qqmusic_ipod/features/shell/models/ipod_models.dart';
+import 'package:qqmusic_ipod/features/shell/state/shell_controller.dart';
+
+Widget _host(ShellController shell) {
+  return MaterialApp(
+    home: Scaffold(
+      body: PageView(
+        controller: shell.pageController,
+        physics: const NeverScrollableScrollPhysics(),
+        children: List<Widget>.generate(
+          5,
+          (index) => Center(child: Text('page-$index')),
+        ),
+      ),
+    ),
+  );
+}
+
+Future<ShellController> _pumpShell(WidgetTester tester) async {
+  SharedPreferences.setMockInitialValues({});
+  final shell = ShellController(api: const _FakeApi());
+  addTearDown(shell.dispose);
+  await tester.pumpWidget(_host(shell));
+  await tester.pump();
+  return shell;
+}
+
+void main() {
+  testWidgets('non-adjacent modes animate instead of teleporting', (
+    tester,
+  ) async {
+    final shell = await _pumpShell(tester);
+
+    // Menu (page 0) to player (page 2) used to jump because the pages are
+    // more than one index apart.
+    final flight = shell.switchMode(PlayerMode.player);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 140));
+
+    final midFlight = shell.pageController.page!;
+    expect(midFlight, greaterThan(0.0));
+    expect(midFlight, lessThan(2.0));
+
+    await tester.pumpAndSettle();
+    await flight;
+
+    expect(shell.pageController.page, closeTo(2, 0.001));
+    expect(shell.mode, PlayerMode.player);
+  });
+
+  testWidgets('queue and player transitions move in both directions', (
+    tester,
+  ) async {
+    final shell = await _pumpShell(tester);
+
+    // The flight future only resolves while the tester pumps frames, so keep
+    // it and await it after settling.
+    final toPlayer = shell.switchMode(PlayerMode.player);
+    await tester.pumpAndSettle();
+    await toPlayer;
+
+    final toQueue = shell.switchMode(PlayerMode.queue);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 140));
+    expect(shell.pageController.page, greaterThan(2.0));
+    expect(shell.pageController.page, lessThan(4.0));
+    await tester.pumpAndSettle();
+    await toQueue;
+    expect(shell.pageController.page, closeTo(4, 0.001));
+
+    final backToPlayer = shell.switchMode(PlayerMode.player);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 140));
+    expect(shell.pageController.page, lessThan(4.0));
+    expect(shell.pageController.page, greaterThan(2.0));
+    await tester.pumpAndSettle();
+    await backToPlayer;
+    expect(shell.pageController.page, closeTo(2, 0.001));
+    expect(shell.mode, PlayerMode.player);
+  });
+
+  testWidgets('a superseded destination retargets without ghost pages', (
+    tester,
+  ) async {
+    final shell = await _pumpShell(tester);
+
+    final superseded = shell.switchMode(PlayerMode.player);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 80));
+    final retargeted = shell.switchMode(PlayerMode.queue);
+
+    await tester.pumpAndSettle();
+    await superseded;
+    await retargeted;
+
+    expect(shell.mode, PlayerMode.queue);
+    expect(shell.pageController.page, closeTo(4, 0.001));
+  });
+
+  testWidgets('reduced motion jumps to the destination page', (tester) async {
+    final shell = await _pumpShell(tester);
+    shell.syncReducedMotion(true);
+
+    final flight = shell.switchMode(PlayerMode.queue);
+    await tester.pump();
+
+    expect(shell.pageController.page, closeTo(4, 0.001));
+    await flight;
+    expect(shell.mode, PlayerMode.queue);
+  });
+}
+
+class _FakeApi implements QqMusicApi {
+  const _FakeApi();
+
+  @override
+  QqMusicCredential? get credential => null;
+
+  @override
+  bool get isLoggedIn => false;
+
+  @override
+  Future<void> restoreSession() async {}
+
+  @override
+  Future<QqMusicFeatureResult> loadFeature(
+    QqMusicFeature feature, {
+    int page = 1,
+    int pageSize = 25,
+    bool forceRefresh = false,
+  }) async {
+    return const QqMusicFeatureResult(title: '', items: []);
+  }
+
+  @override
+  void dispose() {}
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}

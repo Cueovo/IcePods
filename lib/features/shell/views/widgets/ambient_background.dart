@@ -143,6 +143,11 @@ class _AmbientBackgroundState extends State<AmbientBackground> {
   Widget build(BuildContext context) {
     final screenSize = MediaQuery.sizeOf(context);
     final pixelRatio = MediaQuery.devicePixelRatioOf(context);
+    final reduceMotion =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final ambientShift = reduceMotion
+        ? AppDurations.reducedMotion
+        : AppDurations.quick;
     final customImagePath = widget.customImagePath;
     return ClipRect(
       child: Stack(
@@ -162,8 +167,8 @@ class _AmbientBackgroundState extends State<AmbientBackground> {
             ),
           ),
           AnimatedContainer(
-            duration: AppDurations.standard,
-            curve: AppCurves.standard,
+            duration: ambientShift,
+            curve: AppCurves.sceneEase,
             decoration: BoxDecoration(
               gradient: RadialGradient(
                 center: const Alignment(-.62, -.72),
@@ -179,9 +184,11 @@ class _AmbientBackgroundState extends State<AmbientBackground> {
             ),
           ),
           AnimatedSwitcher(
-            duration: AppDurations.emphasized,
-            switchInCurve: AppCurves.menuPage,
-            switchOutCurve: AppCurves.standard,
+            duration: reduceMotion
+                ? AppDurations.reducedMotion
+                : AppDurations.scene,
+            switchInCurve: AppCurves.sceneEase,
+            switchOutCurve: AppCurves.sceneEase,
             layoutBuilder: (currentChild, previousChildren) => Stack(
               fit: StackFit.expand,
               children: [
@@ -262,8 +269,8 @@ class _AmbientBackgroundState extends State<AmbientBackground> {
           ),
           // Luminance-aware scrim so white text stays readable over any art.
           AnimatedContainer(
-            duration: AppDurations.standard,
-            curve: AppCurves.standard,
+            duration: ambientShift,
+            curve: AppCurves.sceneEase,
             color: _palette.contrastScrim,
           ),
         ],

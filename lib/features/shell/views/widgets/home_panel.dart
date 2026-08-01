@@ -76,10 +76,17 @@ class _HomePanelState extends State<HomePanel> {
     if ((target - viewTop).abs() < 1) {
       return;
     }
+    if (!mounted) {
+      return;
+    }
+    if (MediaQuery.maybeOf(context)?.disableAnimations ?? false) {
+      _menuController.jumpTo(target);
+      return;
+    }
     _menuController.animateTo(
       target,
-      duration: const Duration(milliseconds: 260),
-      curve: Curves.easeOutCubic,
+      duration: AppDurations.quick,
+      curve: AppCurves.strongEaseOut,
     );
   }
 
@@ -89,6 +96,8 @@ class _HomePanelState extends State<HomePanel> {
     final selectedValue = widget.valueForEntry?.call(selected);
     final selectedDescription =
         widget.descriptionForEntry?.call(selected) ?? selected.description;
+    final reduceMotion =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
     // Content floats on ambient; no opaque sheet under the split.
     return Padding(
       // No fixed bottom reserve — list padding clears the glass curve instead.
@@ -118,6 +127,7 @@ class _HomePanelState extends State<HomePanel> {
                   return _MenuTile(
                     entry: widget.page.entries[index],
                     selected: widget.selectedIndex == index,
+                    reduceMotion: reduceMotion,
                     value: widget.valueForEntry?.call(
                       widget.page.entries[index],
                     ),
@@ -129,9 +139,9 @@ class _HomePanelState extends State<HomePanel> {
           const SizedBox(width: 15),
           Expanded(
             child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 240),
-              switchInCurve: const Cubic(0.2, 0.8, 0.2, 1),
-              switchOutCurve: Curves.easeIn,
+              duration: reduceMotion
+                  ? AppDurations.reducedMotion
+                  : AppDurations.quick,
               layoutBuilder: (currentChild, previousChildren) => Stack(
                 fit: StackFit.expand,
                 children: [
@@ -139,10 +149,24 @@ class _HomePanelState extends State<HomePanel> {
                   ?currentChild,
                 ],
               ),
-              transitionBuilder: (child, animation) => ScaleTransition(
-                scale: Tween<double>(begin: .985, end: 1).animate(animation),
-                child: child,
-              ),
+              transitionBuilder: (child, animation) {
+                // Fade the outgoing card out early: two opaque preview cards
+                // stacked in the same plane read as a double exposure.
+                final opacity = CurvedAnimation(
+                  parent: animation,
+                  curve: AppCurves.sceneEase,
+                );
+                if (reduceMotion) {
+                  return FadeTransition(opacity: opacity, child: child);
+                }
+                return FadeTransition(
+                  opacity: opacity,
+                  child: ScaleTransition(
+                    scale: Tween<double>(begin: .985, end: 1).animate(opacity),
+                    child: child,
+                  ),
+                );
+              },
               child: _PreviewCard(
                 key: ValueKey(selected.id),
                 entry: selected,
@@ -161,19 +185,26 @@ class _MenuTile extends StatelessWidget {
   const _MenuTile({
     required this.entry,
     required this.selected,
+    required this.reduceMotion,
     required this.value,
   });
 
   final MenuEntry entry;
   final bool selected;
+  final bool reduceMotion;
   final String? value;
 
   @override
   Widget build(BuildContext context) {
+    // Selection feedback is the highest-frequency motion in the app; keep it
+    // short enough that rapid wheel rotation never trails the input.
+    final feedback = reduceMotion
+        ? AppDurations.reducedMotion
+        : AppDurations.press;
     return AnimatedContainer(
       key: selected ? const ValueKey('menu-selection-indicator') : null,
-      duration: const Duration(milliseconds: 180),
-      curve: Curves.easeOutCubic,
+      duration: feedback,
+      curve: AppCurves.strongEaseOut,
       height: _menuTileHeight,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
@@ -208,7 +239,8 @@ class _MenuTile extends StatelessWidget {
             )
           else
             AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
+              duration: feedback,
+              curve: AppCurves.strongEaseOut,
               width: 26,
               height: 26,
               margin: const EdgeInsets.only(right: 8),
@@ -233,8 +265,8 @@ class _MenuTile extends StatelessWidget {
             ),
           Expanded(
             child: AnimatedDefaultTextStyle(
-              duration: const Duration(milliseconds: 180),
-              curve: Curves.easeOutCubic,
+              duration: feedback,
+              curve: AppCurves.strongEaseOut,
               style: (selected ? AppTextStyles.label : AppTextStyles.body)
                   .copyWith(letterSpacing: selected ? 0.1 : 0),
               child: Text(
@@ -246,7 +278,7 @@ class _MenuTile extends StatelessWidget {
           ),
           if (value != null)
             AnimatedSwitcher(
-              duration: const Duration(milliseconds: 160),
+              duration: feedback,
               child: Text(
                 value!,
                 key: ValueKey(value),
@@ -260,7 +292,7 @@ class _MenuTile extends StatelessWidget {
             )
           else
             AnimatedOpacity(
-              duration: const Duration(milliseconds: 140),
+              duration: feedback,
               opacity: selected ? 1 : .28,
               child: Icon(
                 switch (entry.action) {

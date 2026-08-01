@@ -13,6 +13,9 @@ void main() {
     expect(AppTextStyles.heavy, FontWeight.w800);
     expect(AppDurations.press, const Duration(milliseconds: 120));
     expect(AppDurations.scene, const Duration(milliseconds: 280));
+    expect(AppDurations.reducedMotion, const Duration(milliseconds: 120));
+    expect(AppCurves.sceneEase, const Cubic(0.23, 1, 0.32, 1));
+    expect(AppCurves.movementEase, const Cubic(0.77, 0, 0.175, 1));
   });
 
   testWidgets('semantic text roles remain readable at larger text scale', (
