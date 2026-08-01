@@ -1,7 +1,7 @@
 # 006 — Give the Click Wheel Physical Response
 
-- **Status**: TODO
-- **Commit**: 60c800d
+- **Status**: IMPLEMENTED
+- **Commit**: pending
 - **Severity**: HIGH
 - **Category**: Physicality & origin; Purpose & frequency; Accessibility
 - **Estimated scope**: 2 source files, focused implementation
@@ -37,7 +37,7 @@ enum _WheelPress { none, menu, previous, next, playPause, center }
 On pointer-down inside a tappable sector:
 
 - Set the pressed sector immediately.
-- Apply visible scale `0.97` to the pressed button only.
+- Apply visible scale `0.96` to the pressed button only. The repository's `better-ui` skill requires exactly `0.96` for press feedback and forbids values below `0.95`, so it wins over the `0.97` originally sketched here.
 - Tighten its shadow/highlight subtly; do not move the whole wheel.
 - Use `AppDurations.press` = 120ms and `AppCurves.strongEaseOut`.
 
@@ -55,7 +55,7 @@ Under reduced motion, retain a color/shadow response but remove scale.
 2. Add a helper that resolves the sector from local pointer position using the existing radius and cardinal-direction rules.
 3. Set `_pressed` during pointer-down for tap-eligible sectors and call `setState` only when the state changes.
 4. Clear `_pressed` on pointer-up and pointer-cancel before invoking callbacks. Ensure an interrupted pointer cannot leave a pressed sector stuck.
-5. Update `_WheelButton` to accept `pressed` and `reduceMotion`, using `AnimatedScale` or a direct transform with 0.97 scale and a 120ms ease-out. Preserve the existing semantic labels and hit areas.
+5. Update `_WheelButton` to accept `pressed` and `reduceMotion`, using `AnimatedScale` or a direct transform with 0.96 scale and a 120ms ease-out. Preserve the existing semantic labels and hit areas.
 6. Add center-button pressed visual treatment without changing its semantic action or pointer routing.
 7. Add widget tests for each cardinal button, center button, rotation cancellation, and reduced-motion behavior.
 
@@ -75,3 +75,14 @@ Under reduced motion, retain a color/shadow response but remove scale.
 - **Reduced motion**: verify scale is absent while non-motion color/shadow feedback remains.
 - **Accessibility**: TalkBack/VoiceOver must still expose all five actions with their existing labels.
 - **Done when**: the wheel visibly behaves like a physical control without changing its established interaction contract.
+
+## Execution result
+
+- `_WheelPress` tracks the held sector. `_sectorFor` now owns the geometry and `_handleTap` switches on its result, so pressed feedback and dispatched action can never disagree and the hit regions are unchanged.
+- Press feedback is transform-only `scale: 0.96` over `AppDurations.press` (120ms) with `AppCurves.strongEaseOut`, releasing in 80ms so the button snaps back faster than it sinks. `0.96` follows the repository `better-ui` convention; the plan's original `0.97` was updated to match.
+- Cardinal buttons also gain a subtle pressed pill wash, and the center button darkens its gradient and tightens its shadow from 4px/1px to 2px/0.5px, reading as a dome sitting closer to the panel.
+- A move beyond the existing 8px tap threshold clears the press, so rotating or sliding never leaves a stuck pressed sector. `_resetPointer` clears it on both pointer-up and pointer-cancel, before the callbacks run.
+- Reduced motion drops the scale entirely through `_PressFeedback` and keeps only the color/shadow response.
+- Hit and semantic bounds stay 72×64 for the cardinal buttons; the pressed decoration is painted inside that box.
+- `flutter analyze`: `No issues found!`. `flutter test`: 44 tests passing, including new wheel coverage for all five actions, pressed compression isolation, center shadow tightening, rotation cancellation, reduced motion, and semantic labels.
+- Physical-device checks still pending: rapid press feel, ring rotation with a stuck-press look, and TalkBack/VoiceOver traversal.
