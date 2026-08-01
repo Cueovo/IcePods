@@ -1,7 +1,7 @@
 # 004 — Make Album Artwork Drive the App Atmosphere
 
-- **Status**: TODO
-- **Commit**: 60c800d
+- **Status**: IMPLEMENTED
+- **Commit**: pending
 - **Severity**: HIGH
 - **Category**: Cohesion; Performance; Accessibility
 - **Estimated scope**: 6 source files, medium implementation
@@ -111,3 +111,15 @@ The mobile ambient result should use a low-resolution blurred source or a bounde
 - **Contrast**: verify title/meta text over a bright custom photo and a white album cover.
 - **Performance**: profile menu navigation and track changes in Flutter DevTools; no full-screen filter spike should exceed the existing frame budget on a representative Android device.
 - **Done when**: ambient color is derived from image content, custom backgrounds receive the same scrim pipeline, and the app has one shared artwork treatment on native platforms.
+
+## Execution result
+
+- `ArtworkPalette` and the bounded sampler live in `lib/core/theme/artwork/artwork_palette.dart`. Sampling decodes at most 32×32 pixels, buckets hue, clamps saturation/lightness to a dark wash, and derives the scrim from average luminance. Failures return `ArtworkPalette.neutral` and never block the first frame; `ArtworkPalettes.peek` serves already sampled keys synchronously.
+- `AmbientBackground` (native only) replaced the five hard-coded accents and the URL code-unit seed with the sampled palette, and the fixed `0x3D000000` dim with `palette.contrastScrim`. Palette changes are applied at the same moment the blurred artwork swaps, so light and image move together.
+- The full-screen sigma-44 blur was replaced with sigma 18 applied to a 1/2.5 proxy surface that is then upscaled, keeping the previous visual blur (~45 effective) while filtering ~16% of the pixels. The 1.24 overscan is preserved.
+- `ArtworkImage` fallback iconography now scales with its box (14–48) instead of always painting a 48px album glyph in 38px thumbnails.
+- Deviations from the plan, deliberate:
+  - Custom photos receive the luminance-aware scrim but are still painted sharp. Forcing the artwork blur onto a user-selected wallpaper would change existing behavior, and the plan's user-adjustable blur/darkness control needs a settings surface that is out of scope here.
+  - Feeding the palette into Now Playing, Cover Flow, and the queue current item is left to plan 008, which owns the shared artwork identity. The cache is already keyed by resolved image URL, so those surfaces can read the same palette without re-sampling.
+- `flutter analyze`: `No issues found!`. `flutter test`: 34 tests passing, including new palette coverage for vivid, monochrome, bright, dark, transparent, and decode-failure cases.
+- Physical-device checks still pending: bright custom photo, white album cover, and DevTools raster comparison before/after the blur change.

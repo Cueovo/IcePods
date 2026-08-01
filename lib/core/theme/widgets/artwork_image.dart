@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:qqmusic_ipod/core/theme/tokens/app_tokens.dart';
+
 class ArtworkImage extends StatelessWidget {
   static final RegExp _qqHttpCoverHost = RegExp(r'^http://y\.gtimg\.cn/');
   static const _localPalettes = <(Color, Color, Color)>[
@@ -58,17 +60,31 @@ class ArtworkImage extends StatelessWidget {
         ? null
         : (cacheHeight! * devicePixelRatio).round();
     Widget fallback() {
-      return const DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF454554), Color(0xFF15151B)],
-          ),
-        ),
-        child: Center(
-          child: Icon(Icons.album_rounded, color: Color(0x99FFFFFF), size: 48),
-        ),
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final rawSize = constraints.biggest.shortestSide;
+          // Small list thumbnails must not receive a 48px album glyph.
+          final iconSize = (rawSize.isFinite ? rawSize * .42 : 48.0).clamp(
+            14.0,
+            48.0,
+          );
+          return DecoratedBox(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF454554), Color(0xFF15151B)],
+              ),
+            ),
+            child: Center(
+              child: Icon(
+                Icons.album_rounded,
+                color: AppColors.textSecondary,
+                size: iconSize,
+              ),
+            ),
+          );
+        },
       );
     }
 
@@ -134,11 +150,7 @@ class ArtworkImage extends StatelessWidget {
                         ),
                       ],
                     ),
-                    child: Icon(
-                      icon,
-                      size: size * .23,
-                      color: palette.$3,
-                    ),
+                    child: Icon(icon, size: size * .23, color: palette.$3),
                   ),
                 ),
               ],

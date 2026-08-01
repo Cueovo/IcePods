@@ -5,7 +5,7 @@ These plans are for the native Android/iOS app only. Web layout, browser interac
 | # | Plan | Severity | Status |
 | --- | --- | --- | --- |
 | 003 | [Establish the app visual system](003-establish-app-visual-system.md) | HIGH | IMPLEMENTED |
-| 004 | [Make album artwork drive the app atmosphere](004-album-driven-atmosphere.md) | HIGH | TODO |
+| 004 | [Make album artwork drive the app atmosphere](004-album-driven-atmosphere.md) | HIGH | IMPLEMENTED |
 | 005 | [Unify native scene motion and page transitions](005-unify-native-scene-motion.md) | HIGH | TODO |
 | 006 | [Give the Click Wheel physical response](006-click-wheel-material-feedback.md) | HIGH | TODO |
 | 007 | [Create native portrait and landscape compositions](007-native-responsive-composition.md) | HIGH | TODO |

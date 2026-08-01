@@ -4,8 +4,14 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
+import 'package:qqmusic_ipod/core/theme/artwork/artwork_palette.dart';
 import 'package:qqmusic_ipod/core/theme/tokens/app_tokens.dart';
 import 'package:qqmusic_ipod/core/theme/widgets/artwork_image.dart';
+
+/// Blur is applied to a downscaled proxy layer, then upscaled by the same
+/// factor, so the effective blur matches a full-surface sigma of ~45.
+const double _blurDownscale = 2.5;
+const double _blurSigma = 18;
 
 class AmbientBackground extends StatefulWidget {
   const AmbientBackground({
@@ -23,16 +29,11 @@ class AmbientBackground extends StatefulWidget {
 
 class _AmbientBackgroundState extends State<AmbientBackground> {
   static final RegExp _qqHttpCoverHost = RegExp(r'^http://y\.gtimg\.cn/');
-  static const _accents = [
-    Color(0xFF31C27C),
-    Color(0xFF5A8DEE),
-    Color(0xFFE15D8A),
-    Color(0xFFF0A44B),
-    Color(0xFF8B6BE8),
-  ];
 
   String _displayedImageUrl = '';
   String _loadingImageUrl = '';
+  String _paletteKey = '';
+  ArtworkPalette _palette = ArtworkPalette.neutral;
 
   @override
   void didChangeDependencies() {
@@ -50,8 +51,15 @@ class _AmbientBackgroundState extends State<AmbientBackground> {
   }
 
   void _loadRequestedImage() {
-    if (widget.customImagePath?.isNotEmpty == true) {
+    final customImagePath = widget.customImagePath;
+    if (customImagePath != null && customImagePath.isNotEmpty) {
       _loadingImageUrl = '';
+      // Custom photos bypass the artwork pipeline, so they still need a
+      // luminance-aware scrim before white text is painted over them.
+      _requestPalette(
+        'file://$customImagePath',
+        FileImage(File(customImagePath)),
+      );
       return;
     }
     final resolved = widget.imageUrl.replaceFirst(
@@ -61,11 +69,13 @@ class _AmbientBackgroundState extends State<AmbientBackground> {
     if (resolved.startsWith('local://')) {
       _loadingImageUrl = '';
       _displayedImageUrl = resolved;
+      _resetPalette();
       return;
     }
     if (resolved.isEmpty) {
       _loadingImageUrl = '';
       _displayedImageUrl = '';
+      _resetPalette();
       return;
     }
     if (resolved == _displayedImageUrl || resolved == _loadingImageUrl) {
@@ -98,6 +108,33 @@ class _AmbientBackgroundState extends State<AmbientBackground> {
           _displayedImageUrl = resolved;
           _loadingImageUrl = '';
         });
+        // Sample after the swap so ambient light and artwork change together.
+        _requestPalette(resolved, NetworkImage(resolved));
+      }),
+    );
+  }
+
+  void _resetPalette() {
+    _paletteKey = '';
+    _palette = ArtworkPalette.neutral;
+  }
+
+  void _requestPalette(String key, ImageProvider provider) {
+    if (_paletteKey == key) {
+      return;
+    }
+    _paletteKey = key;
+    final cached = ArtworkPalettes.peek(key);
+    if (cached != null) {
+      _palette = cached;
+      return;
+    }
+    unawaited(
+      ArtworkPalettes.resolve(key, provider).then((palette) {
+        if (!mounted || _paletteKey != key || palette == _palette) {
+          return;
+        }
+        setState(() => _palette = palette);
       }),
     );
   }
@@ -107,11 +144,6 @@ class _AmbientBackgroundState extends State<AmbientBackground> {
     final screenSize = MediaQuery.sizeOf(context);
     final pixelRatio = MediaQuery.devicePixelRatioOf(context);
     final customImagePath = widget.customImagePath;
-    final seed = widget.imageUrl.codeUnits.fold<int>(
-      0,
-      (sum, value) => sum + value,
-    );
-    final accent = _accents[seed % _accents.length];
     return ClipRect(
       child: Stack(
         fit: StackFit.expand,
@@ -137,11 +169,12 @@ class _AmbientBackgroundState extends State<AmbientBackground> {
                 center: const Alignment(-.62, -.72),
                 radius: 1.28,
                 colors: [
-                  accent.withValues(alpha: .46),
-                  accent.withValues(alpha: .12),
+                  _palette.primary.withValues(alpha: .46),
+                  _palette.primary.withValues(alpha: .14),
+                  _palette.secondary.withValues(alpha: .1),
                   Colors.transparent,
                 ],
-                stops: const [0, .46, 1],
+                stops: const [0, .42, .72, 1],
               ),
             ),
           ),
@@ -178,25 +211,61 @@ class _AmbientBackgroundState extends State<AmbientBackground> {
                   )
                 : RepaintBoundary(
                     key: ValueKey(_displayedImageUrl),
-                    child: ImageFiltered(
-                      imageFilter: ImageFilter.blur(sigmaX: 44, sigmaY: 44),
-                      child: Transform.scale(
-                        scale: 1.24,
-                        child: ArtworkImage(
-                          imageUrl: _displayedImageUrl,
-                          fit: BoxFit.cover,
-                          backgroundColor: Colors.transparent,
-                          cacheWidth: screenSize.width / 2,
-                          cacheHeight: screenSize.height / 2,
-                          fadeIn: false,
-                          filterQuality: FilterQuality.low,
-                        ),
-                      ),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        // Blur a downscaled proxy and upscale the result: the
+                        // filtered surface is ~16% of the glass area, and the
+                        // effective blur stays at the previous sigma.
+                        final width = constraints.maxWidth.isFinite
+                            ? constraints.maxWidth
+                            : screenSize.width;
+                        final height = constraints.maxHeight.isFinite
+                            ? constraints.maxHeight
+                            : screenSize.height;
+                        final proxyWidth = (width / _blurDownscale).clamp(
+                          1.0,
+                          width,
+                        );
+                        final proxyHeight = (height / _blurDownscale).clamp(
+                          1.0,
+                          height,
+                        );
+                        return Transform.scale(
+                          scale: 1.24,
+                          child: FittedBox(
+                            fit: BoxFit.cover,
+                            clipBehavior: Clip.none,
+                            child: SizedBox(
+                              width: proxyWidth,
+                              height: proxyHeight,
+                              child: ImageFiltered(
+                                imageFilter: ImageFilter.blur(
+                                  sigmaX: _blurSigma,
+                                  sigmaY: _blurSigma,
+                                ),
+                                child: ArtworkImage(
+                                  imageUrl: _displayedImageUrl,
+                                  fit: BoxFit.cover,
+                                  backgroundColor: Colors.transparent,
+                                  cacheWidth: proxyWidth,
+                                  cacheHeight: proxyHeight,
+                                  fadeIn: false,
+                                  filterQuality: FilterQuality.low,
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   ),
           ),
-          // Lighter dim so status bar + preview share the same ambient wash.
-          const ColoredBox(color: Color(0x3D000000)),
+          // Luminance-aware scrim so white text stays readable over any art.
+          AnimatedContainer(
+            duration: AppDurations.standard,
+            curve: AppCurves.standard,
+            color: _palette.contrastScrim,
+          ),
         ],
       ),
     );
