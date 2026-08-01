@@ -608,8 +608,27 @@ class ShellController extends ChangeNotifier {
     }
   }
 
-  void stepSelection(int direction) {
-    _selectionClick();
+  /// Pointer or assistive activation of a menu row: move the selection first,
+  /// then act on a second activation, mirroring the wheel's two steps.
+  void activateMenuIndex(int index) {
+    if (mode != PlayerMode.menu) {
+      return;
+    }
+    final entries = currentMenuPage.entries;
+    if (index < 0 || index >= entries.length) {
+      return;
+    }
+    if (menuIndex != index) {
+      menuIndices[currentMenuPage.section] = index;
+      _selectionClick();
+      _tick();
+      notifyListeners();
+      return;
+    }
+    handleCenter();
+  }
+
+  void stepSelection(int direction) {    _selectionClick();
     _tick();
     if (mode == PlayerMode.menu) {
       final entries = currentMenuPage.entries;

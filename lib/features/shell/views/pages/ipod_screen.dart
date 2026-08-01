@@ -302,6 +302,8 @@ class _IpodShellView extends StatelessWidget {
                                                     shell.menuPath.length,
                                                 railWidth:
                                                     metrics.menuRailWidth,
+                                                onSelectIndex:
+                                                    shell.activateMenuIndex,
                                                 valueForEntry:
                                                     shell.valueForMenuEntry,
                                                 descriptionForEntry: shell
@@ -426,6 +428,7 @@ class _MenuPageTransition extends StatefulWidget {
     required this.selectedIndex,
     required this.menuDepth,
     required this.railWidth,
+    required this.onSelectIndex,
     required this.valueForEntry,
     required this.descriptionForEntry,
   });
@@ -434,6 +437,7 @@ class _MenuPageTransition extends StatefulWidget {
   final int selectedIndex;
   final int menuDepth;
   final double railWidth;
+  final ValueChanged<int> onSelectIndex;
   final String? Function(MenuEntry entry) valueForEntry;
   final String Function(MenuEntry entry) descriptionForEntry;
 
@@ -517,6 +521,7 @@ class _MenuPageTransitionState extends State<_MenuPageTransition> {
             page: widget.page,
             selectedIndex: widget.selectedIndex,
             railWidth: widget.railWidth,
+            onSelectIndex: widget.onSelectIndex,
             valueForEntry: widget.valueForEntry,
             descriptionForEntry: widget.descriptionForEntry,
           ),
@@ -571,6 +576,8 @@ class _NowPlayingHost extends StatelessWidget {
           onLikedPressed: () => unawaited(shell.music.toggleCurrentSongLiked()),
           onPlaybackModePressed: shell.music.cyclePlaybackMode,
           onQueuePressed: shell.openQueue,
+          onSeekTo: (value) =>
+              unawaited(shell.music.seekToProgress(value.clamp(0.0, 1.0))),
         );
       },
     );

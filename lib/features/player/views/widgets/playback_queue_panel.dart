@@ -41,11 +41,19 @@ class PlaybackQueuePanel extends StatefulWidget {
 class _PlaybackQueuePanelState extends State<PlaybackQueuePanel> {
   static const _itemExtent = 52.0;
   static const _itemGap = 6.0;
-  static const _rowExtent = _itemExtent + _itemGap;
   static const _listBottomPadding = 4.0;
 
   final ScrollController _scrollController = ScrollController();
   bool _selectionScrollScheduled = false;
+
+  /// Rows grow with the text scale so large-text users do not get clipped
+  /// titles inside a fixed 52px extent.
+  double _rowHeight(BuildContext context) {
+    final scale = MediaQuery.textScalerOf(context).scale(_itemExtent);
+    return scale.clamp(_itemExtent, _itemExtent * 1.6);
+  }
+
+  double _rowExtentFor(BuildContext context) => _rowHeight(context) + _itemGap;
 
   @override
   void initState() {
@@ -80,9 +88,10 @@ class _PlaybackQueuePanelState extends State<PlaybackQueuePanel> {
       }
       final position = _scrollController.position;
       final selected = widget.selectedIndex.clamp(0, widget.queue.length - 1);
+      final rowHeight = _rowHeight(context);
       final target =
-          (selected * _rowExtent +
-                  _itemExtent / 2 -
+          (selected * (rowHeight + _itemGap) +
+                  rowHeight / 2 -
                   position.viewportDimension / 2)
               .clamp(0.0, position.maxScrollExtent)
               .toDouble();
@@ -98,8 +107,8 @@ class _PlaybackQueuePanelState extends State<PlaybackQueuePanel> {
       }
       _scrollController.animateTo(
         target,
-        duration: const Duration(milliseconds: 140),
-        curve: Curves.easeOutCubic,
+        duration: AppDurations.press,
+        curve: AppCurves.strongEaseOut,
       );
     });
   }
@@ -218,7 +227,7 @@ class _PlaybackQueuePanelState extends State<PlaybackQueuePanel> {
                         child: ListView.builder(
                           key: const ValueKey('playback-queue-list'),
                           controller: _scrollController,
-                          itemExtent: _rowExtent,
+                          itemExtent: _rowExtentFor(context),
                           padding: const EdgeInsets.only(
                             bottom: _listBottomPadding,
                           ),
@@ -238,6 +247,7 @@ class _PlaybackQueuePanelState extends State<PlaybackQueuePanel> {
                                 isNext: index == widget.currentIndex + 1,
                                 played: index < widget.currentIndex,
                                 isPlaying: widget.isPlaying,
+                                height: _rowHeight(context),
                                 onTap: () => widget.onPlayIndex(index),
                                 onRemove: index == widget.currentIndex
                                     ? null
@@ -319,6 +329,7 @@ class _PlaybackQueueTile extends StatelessWidget {
     required this.isNext,
     required this.played,
     required this.isPlaying,
+    required this.height,
     required this.onTap,
     required this.onRemove,
     super.key,
@@ -331,6 +342,7 @@ class _PlaybackQueueTile extends StatelessWidget {
   final bool isNext;
   final bool played;
   final bool isPlaying;
+  final double height;
   final VoidCallback onTap;
   final VoidCallback? onRemove;
 
@@ -372,7 +384,7 @@ class _PlaybackQueueTile extends StatelessWidget {
                   ? AppDurations.reducedMotion
                   : AppDurations.quick,
               curve: AppCurves.standard,
-              height: 52,
+              height: height,
               padding: const EdgeInsets.symmetric(horizontal: 8),
               decoration: BoxDecoration(
                 color: current

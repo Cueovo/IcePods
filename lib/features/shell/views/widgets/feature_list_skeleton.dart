@@ -14,7 +14,24 @@ class _FeatureListSkeletonState extends State<FeatureListSkeleton>
   late final AnimationController _animation = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 1200),
-  )..repeat();
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Reduced motion gets a static skeleton: a repeating shimmer is exactly
+    // the kind of continuous decoration the setting asks us to stop.
+    final reduceMotion =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    if (reduceMotion) {
+      if (_animation.isAnimating) {
+        _animation.stop();
+      }
+      _animation.value = .5;
+    } else if (!_animation.isAnimating) {
+      _animation.repeat();
+    }
+  }
 
   @override
   void dispose() {

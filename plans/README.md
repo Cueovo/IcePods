@@ -10,7 +10,7 @@ These plans are for the native Android/iOS app only. Web layout, browser interac
 | 006 | [Give the Click Wheel physical response](006-click-wheel-material-feedback.md) | HIGH | IMPLEMENTED |
 | 007 | [Create native portrait and landscape compositions](007-native-responsive-composition.md) | HIGH | IMPLEMENTED |
 | 008 | [Make Now Playing, Cover Flow, and Queue one artwork scene](008-unify-artwork-player-scenes.md) | HIGH | IMPLEMENTED |
-| 009 | [Isolate native rebuilds and harden accessibility](009-native-performance-accessibility.md) | HIGH | TODO |
+| 009 | [Isolate native rebuilds and harden accessibility](009-native-performance-accessibility.md) | HIGH | PARTIALLY IMPLEMENTED |
 
 ## Recommended execution order
 
@@ -29,6 +29,11 @@ These plans are for the native Android/iOS app only. Web layout, browser interac
 - 007 should use the typography and hit-target rules from 003 and 009.
 - 008 depends on the artwork identity/palette from 004 and transition grammar from 005.
 - 009 is an ongoing verification gate for every other plan.
+
+## Remaining work
+
+- Plan 009 is partially done. Still open: decomposing `ShellController` into per-concern listenables, a variable-extent lyric list, a pinned `NOW` queue card, and all device-side verification (DevTools frame/raster traces, TalkBack/VoiceOver, low-end Android).
+- Every plan's "feel check" and physical-device steps remain pending; nothing in 003–009 has been validated on real hardware yet.
 
 ## Historical plans
 

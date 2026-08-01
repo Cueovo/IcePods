@@ -34,6 +34,7 @@ class NowPlayingPanel extends StatefulWidget {
     this.onLyricsPressed,
     this.onPlaybackModePressed,
     this.onQueuePressed,
+    this.onSeekTo,
     super.key,
   });
 
@@ -58,6 +59,9 @@ class NowPlayingPanel extends StatefulWidget {
   final VoidCallback? onLyricsPressed;
   final VoidCallback? onPlaybackModePressed;
   final VoidCallback? onQueuePressed;
+
+  /// Absolute seek (0–1) used by accessible progress adjustment.
+  final ValueChanged<double>? onSeekTo;
 
   @override
   State<NowPlayingPanel> createState() => _NowPlayingPanelState();
@@ -290,6 +294,7 @@ class _NowPlayingPanelState extends State<NowPlayingPanel> {
                   isBuffering: widget.isBuffering,
                   isSeeking: widget.isSeeking,
                   imageUrl: widget.album.imageUrl,
+                  onSeekTo: widget.onSeekTo,
                   height: tight ? 22 : (compact ? 26 : 30),
                 ),
                 if (widget.error.isNotEmpty) ...[
@@ -528,8 +533,12 @@ class _PlayerProgressBar extends StatelessWidget {
     required this.isBuffering,
     required this.isSeeking,
     required this.imageUrl,
+    required this.onSeekTo,
     this.height = 30,
   });
+
+  /// Accessible seek step, matching a comfortable wheel nudge.
+  static const double _seekStep = .05;
 
   final double progress;
   final double animationPhase;
@@ -539,6 +548,9 @@ class _PlayerProgressBar extends StatelessWidget {
 
   /// Artwork the progress light borrows its colors from.
   final String imageUrl;
+
+  /// Absolute seek used by assistive increase/decrease actions.
+  final ValueChanged<double>? onSeekTo;
   final double height;
 
   /// Lifts an ambient color into a light trace that stays legible on glass.
@@ -563,6 +575,15 @@ class _PlayerProgressBar extends StatelessWidget {
     return Semantics(
       label: '播放进度',
       value: '${(value * 100).round()}%',
+      increasedValue: '${((value + _seekStep) * 100).clamp(0, 100).round()}%',
+      decreasedValue: '${((value - _seekStep) * 100).clamp(0, 100).round()}%',
+      // Screen-reader users get seek controls without the simulated wheel.
+      onIncrease: onSeekTo == null
+          ? null
+          : () => onSeekTo!((value + _seekStep).clamp(0.0, 1.0)),
+      onDecrease: onSeekTo == null
+          ? null
+          : () => onSeekTo!((value - _seekStep).clamp(0.0, 1.0)),
       child: RepaintBoundary(
         key: const ValueKey('player-progress'),
         child: SizedBox(
@@ -592,7 +613,9 @@ class _PlayerProgressBar extends StatelessWidget {
                 duration: isSeeking
                     ? AppDurations.quick
                     : AppDurations.standard,
-                curve: AppCurves.standard,
+                // Playback progress is a continuously advancing value: easing
+                // every incoming sample would make its velocity uneven.
+                curve: isSeeking ? AppCurves.strongEaseOut : Curves.linear,
                 builder: (context, visualState, child) {
                   return CustomPaint(
                     key: const ValueKey('player-progress-paint'),
@@ -993,7 +1016,7 @@ class _LyricsView extends StatefulWidget {
 
 class _LyricsViewState extends State<_LyricsView>
     with SingleTickerProviderStateMixin {
-  static const _itemExtent = 38.0;
+  static const _baseItemExtent = 38.0;
   static const _maxClockDrift = Duration(milliseconds: 320);
   final ScrollController _scrollController = ScrollController();
   late final Ticker _ticker;
@@ -1131,15 +1154,29 @@ class _LyricsViewState extends State<_LyricsView>
 
   int _activeLineIndex(Duration position) {
     final lines = widget.lyrics?.lines ?? const <QqMusicLyricLine>[];
-    var active = 0;
-    for (var index = 0; index < lines.length; index++) {
-      if (lines[index].time <= position) {
-        active = index;
-      } else {
-        break;
+    if (lines.isEmpty) {
+      return 0;
+    }
+    // Walk from the last known line instead of rescanning the whole lyric on
+    // every ticker frame; seeking walks backwards from the same anchor.
+    var active = _activeIndex.clamp(0, lines.length - 1);
+    if (lines[active].time > position) {
+      while (active > 0 && lines[active].time > position) {
+        active -= 1;
       }
+      return active;
+    }
+    while (active + 1 < lines.length && lines[active + 1].time <= position) {
+      active += 1;
     }
     return active;
+  }
+
+  /// Lyric rows grow with the text scale: a scaled two-line lyric must not be
+  /// clipped by a fixed 38px extent.
+  double _itemExtent(BuildContext context) {
+    final scaled = MediaQuery.textScalerOf(context).scale(_baseItemExtent);
+    return scaled.clamp(_baseItemExtent, _baseItemExtent * 2.2);
   }
 
   void _centerActive(bool animate) {
@@ -1147,7 +1184,7 @@ class _LyricsViewState extends State<_LyricsView>
       return;
     }
     final position = _scrollController.position;
-    final target = (_activeIndex * _itemExtent)
+    final target = (_activeIndex * _itemExtent(context))
         .clamp(position.minScrollExtent, position.maxScrollExtent)
         .toDouble();
     final reduceMotion =
@@ -1213,14 +1250,15 @@ class _LyricsViewState extends State<_LyricsView>
         behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
         child: LayoutBuilder(
           builder: (context, constraints) {
+            final itemExtent = _itemExtent(context);
             final centerPadding = math.max(
               0.0,
-              (constraints.maxHeight - _itemExtent) / 2,
+              (constraints.maxHeight - itemExtent) / 2,
             );
             return ListView.builder(
               key: const ValueKey('lyrics-scroll-list'),
               controller: _scrollController,
-              itemExtent: _itemExtent,
+              itemExtent: itemExtent,
               physics: const BouncingScrollPhysics(),
               padding: EdgeInsets.symmetric(vertical: centerPadding),
               itemCount: lines.length,
@@ -1512,15 +1550,13 @@ class _LyricTextLayer extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final resolvedStyle = DefaultTextStyle.of(context).style.merge(style);
-        final textPainter = TextPainter(
-          text: TextSpan(text: text, style: resolvedStyle),
-          textAlign: TextAlign.center,
-          textDirection: Directionality.of(context),
+        final ranges = _resolveLineRanges(
+          text: text,
+          style: resolvedStyle,
+          maxWidth: constraints.maxWidth,
           textScaler: MediaQuery.textScalerOf(context),
-          maxLines: 2,
-          ellipsis: '…',
-        )..layout(maxWidth: constraints.maxWidth);
-        final ranges = _visualLineRanges(textPainter, text);
+          textDirection: Directionality.of(context),
+        );
         final totalLength = text.runes.length;
         final progress = highlightProgress?.clamp(0.0, 1.0).toDouble();
         var rangeIndex = 0;
@@ -1560,6 +1596,73 @@ class _LyricTextLayer extends StatelessWidget {
       },
     );
   }
+}
+
+/// Lyric line breaking is stable for a given text, style, width and text
+/// scale, so it is measured once instead of on every ticker frame.
+final Map<_LyricLayoutKey, List<TextRange>> _lyricRangeCache =
+    <_LyricLayoutKey, List<TextRange>>{};
+const int _lyricRangeCacheLimit = 240;
+
+@immutable
+class _LyricLayoutKey {
+  const _LyricLayoutKey({
+    required this.text,
+    required this.style,
+    required this.maxWidth,
+    required this.textScale,
+  });
+
+  final String text;
+  final TextStyle style;
+  final double maxWidth;
+  final double textScale;
+
+  @override
+  bool operator ==(Object other) {
+    return other is _LyricLayoutKey &&
+        other.text == text &&
+        other.style == style &&
+        other.maxWidth == maxWidth &&
+        other.textScale == textScale;
+  }
+
+  @override
+  int get hashCode => Object.hash(text, style, maxWidth, textScale);
+}
+
+List<TextRange> _resolveLineRanges({
+  required String text,
+  required TextStyle style,
+  required double maxWidth,
+  required TextScaler textScaler,
+  required TextDirection textDirection,
+}) {
+  final key = _LyricLayoutKey(
+    text: text,
+    style: style,
+    maxWidth: maxWidth.roundToDouble(),
+    textScale: textScaler.scale(100),
+  );
+  final cached = _lyricRangeCache[key];
+  if (cached != null) {
+    return cached;
+  }
+  final painter = TextPainter(
+    text: TextSpan(text: text, style: style),
+    textAlign: TextAlign.center,
+    textDirection: textDirection,
+    textScaler: textScaler,
+    maxLines: 2,
+    ellipsis: '…',
+  )..layout(maxWidth: maxWidth);
+  final ranges = _visualLineRanges(painter, text);
+  painter.dispose();
+  if (_lyricRangeCache.length >= _lyricRangeCacheLimit) {
+    _lyricRangeCache.remove(_lyricRangeCache.keys.first);
+  }
+  _lyricRangeCache[key] = ranges;
+  return ranges;
 }
 
 List<TextRange> _visualLineRanges(TextPainter painter, String text) {

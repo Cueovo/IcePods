@@ -109,7 +109,11 @@ class _IpodStatusBarState extends State<IpodStatusBar>
       if (!mounted) {
         return;
       }
-      setState(() => _batteryLevel = level.clamp(0, 100));
+      final next = level.clamp(0, 100);
+      if (next == _batteryLevel) {
+        return;
+      }
+      setState(() => _batteryLevel = next);
     } catch (_) {
       // Keep the last known level when the platform call fails.
     }
@@ -118,7 +122,7 @@ class _IpodStatusBarState extends State<IpodStatusBar>
   Future<void> _refreshBatteryState() async {
     try {
       final state = await _battery.batteryState;
-      if (!mounted) {
+      if (!mounted || state == _batteryState) {
         return;
       }
       setState(() => _batteryState = state);
@@ -130,7 +134,7 @@ class _IpodStatusBarState extends State<IpodStatusBar>
   Future<void> _refreshConnectivity() async {
     try {
       final results = await _connectivity.checkConnectivity();
-      if (!mounted) {
+      if (!mounted || listEquals(results, _networkResults)) {
         return;
       }
       setState(() => _networkResults = results);
@@ -178,113 +182,127 @@ class _IpodStatusBarState extends State<IpodStatusBar>
   Widget build(BuildContext context) {
     final time =
         '${_now.hour.toString().padLeft(2, '0')}:${_now.minute.toString().padLeft(2, '0')}';
+    final charging =
+        _batteryState == BatteryState.charging ||
+        _batteryState == BatteryState.full;
+    // One merged announcement instead of three unlabeled glyphs.
+    final statusSummary = [
+      time,
+      _networkConnected ? '网络已连接' : '网络未连接',
+      '电量 $_batteryLevel%',
+      if (charging) '正在充电',
+    ].join('，');
 
-    return IgnorePointer(
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final metrics = _IosStatusBarMetrics.resolve(
-            MediaQuery.of(context),
-            constraints.maxWidth,
-          );
-          // Bold clock so it holds against ambient / glass gradients.
-          final timeWidget = Text(
-            time,
-            key: const ValueKey('ipod-status-time'),
-            style: TextStyle(
-              color: const Color(0xF2FFFFFF),
-              fontSize: metrics.timeSize,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.2,
-              height: 1,
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
-          );
-          final networkIcon = _networkIcon;
-          final compensateAndroidWifi =
-              defaultTargetPlatform == TargetPlatform.android &&
-              networkIcon == Icons.wifi_rounded;
-          final statusWidget = Row(
-            key: const ValueKey('ipod-status-items'),
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Transform.translate(
-                offset: Offset(0, compensateAndroidWifi ? -1.5 : 0),
-                child: Icon(
-                  networkIcon,
-                  color: _networkConnected
-                      ? const Color(0xF2FFFFFF)
-                      : const Color(0x66FFFFFF),
-                  size: metrics.iconSize + (compensateAndroidWifi ? 1 : 0),
-                ),
+    return Semantics(
+      container: true,
+      label: statusSummary,
+      child: IgnorePointer(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final metrics = _IosStatusBarMetrics.resolve(
+              MediaQuery.of(context),
+              constraints.maxWidth,
+            );
+            // Bold clock so it holds against ambient / glass gradients.
+            final timeWidget = Text(
+              time,
+              key: const ValueKey('ipod-status-time'),
+              style: TextStyle(
+                color: const Color(0xF2FFFFFF),
+                fontSize: metrics.timeSize,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.2,
+                height: 1,
+                fontFeatures: const [FontFeature.tabularFigures()],
               ),
-              SizedBox(width: metrics.itemSpacing),
-              _HorizontalBattery(
-                level: _batteryLevel,
-                state: _batteryState,
-                width: metrics.batteryWidth,
-                height: metrics.batteryHeight,
-              ),
-            ],
-          );
-
-          final slotHeight = metrics.totalHeight;
-          final leadingContentWidth =
-              (metrics.leadingSlotLeft + metrics.leadingSlotWidth) -
-              metrics.leadingContentLeft;
-          final trailingContentWidth =
-              metrics.trailingContentRight - metrics.trailingSlotLeft;
-
-          return SizedBox(
-            key: const ValueKey('ipod-status-bar'),
-            height: slotHeight,
-            child: Stack(
+            );
+            final networkIcon = _networkIcon;
+            final compensateAndroidWifi =
+                defaultTargetPlatform == TargetPlatform.android &&
+                networkIcon == Icons.wifi_rounded;
+            final statusWidget = Row(
+              key: const ValueKey('ipod-status-items'),
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Positioned(
-                  left: metrics.leadingSlotLeft,
-                  top: 0,
-                  width: metrics.leadingSlotWidth,
-                  height: slotHeight,
-                  child: SizedBox(
-                    key: const ValueKey('ipod-status-leading-slot'),
+                Transform.translate(
+                  offset: Offset(0, compensateAndroidWifi ? -1.5 : 0),
+                  child: Icon(
+                    networkIcon,
+                    color: _networkConnected
+                        ? const Color(0xF2FFFFFF)
+                        : const Color(0x66FFFFFF),
+                    size: metrics.iconSize + (compensateAndroidWifi ? 1 : 0),
                   ),
                 ),
-                Positioned(
-                  left: metrics.trailingSlotLeft,
-                  top: 0,
-                  width: metrics.trailingSlotWidth,
-                  height: slotHeight,
-                  child: SizedBox(
-                    key: const ValueKey('ipod-status-trailing-slot'),
-                  ),
-                ),
-                // All device families (classic / notch / Dynamic Island / Android
-                // fallback) keep time leading-left and status trailing-right —
-                // never centered. Classic SE used a centered clock historically,
-                // but this shell always mimics modern iPhone status chrome.
-                Positioned(
-                  top: metrics.contentTop,
-                  left: metrics.leadingContentLeft,
-                  width: leadingContentWidth,
-                  height: metrics.contentHeight,
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: timeWidget,
-                  ),
-                ),
-                Positioned(
-                  top: metrics.contentTop,
-                  left: metrics.trailingSlotLeft,
-                  width: trailingContentWidth,
-                  height: metrics.contentHeight,
-                  child: Align(
-                    alignment: Alignment.centerRight,
-                    child: statusWidget,
-                  ),
+                SizedBox(width: metrics.itemSpacing),
+                _HorizontalBattery(
+                  level: _batteryLevel,
+                  state: _batteryState,
+                  width: metrics.batteryWidth,
+                  height: metrics.batteryHeight,
                 ),
               ],
-            ),
-          );
-        },
+            );
+
+            final slotHeight = metrics.totalHeight;
+            final leadingContentWidth =
+                (metrics.leadingSlotLeft + metrics.leadingSlotWidth) -
+                metrics.leadingContentLeft;
+            final trailingContentWidth =
+                metrics.trailingContentRight - metrics.trailingSlotLeft;
+
+            return SizedBox(
+              key: const ValueKey('ipod-status-bar'),
+              height: slotHeight,
+              child: Stack(
+                children: [
+                  Positioned(
+                    left: metrics.leadingSlotLeft,
+                    top: 0,
+                    width: metrics.leadingSlotWidth,
+                    height: slotHeight,
+                    child: SizedBox(
+                      key: const ValueKey('ipod-status-leading-slot'),
+                    ),
+                  ),
+                  Positioned(
+                    left: metrics.trailingSlotLeft,
+                    top: 0,
+                    width: metrics.trailingSlotWidth,
+                    height: slotHeight,
+                    child: SizedBox(
+                      key: const ValueKey('ipod-status-trailing-slot'),
+                    ),
+                  ),
+                  // All device families (classic / notch / Dynamic Island / Android
+                  // fallback) keep time leading-left and status trailing-right —
+                  // never centered. Classic SE used a centered clock historically,
+                  // but this shell always mimics modern iPhone status chrome.
+                  Positioned(
+                    top: metrics.contentTop,
+                    left: metrics.leadingContentLeft,
+                    width: leadingContentWidth,
+                    height: metrics.contentHeight,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: timeWidget,
+                    ),
+                  ),
+                  Positioned(
+                    top: metrics.contentTop,
+                    left: metrics.trailingSlotLeft,
+                    width: trailingContentWidth,
+                    height: metrics.contentHeight,
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: statusWidget,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
       ),
     );
   }

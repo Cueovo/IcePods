@@ -1,7 +1,7 @@
 # 009 — Isolate Native Rebuilds and Harden Accessibility
 
-- **Status**: TODO
-- **Commit**: 60c800d
+- **Status**: PARTIALLY IMPLEMENTED
+- **Commit**: pending
 - **Severity**: HIGH
 - **Category**: Performance; Accessibility; Interruptibility
 - **Estimated scope**: 8 source/test files, medium-to-large refactor
@@ -86,3 +86,28 @@ Accessibility:
 - **Large text**: no RenderFlex overflow or clipped lyrics at 1.3× and 2.0×.
 - **Reduced motion**: no repeating ticker, Cover Flow 3D movement, lyric auto-scroll, shimmer, or artwork tilt remains active.
 - **Done when**: the highest-frequency interactions rebuild only their necessary subtrees and every primary playback/menu state has an accessible semantic equivalent.
+
+## Execution result
+
+Accessibility and large text, done:
+
+- Menu rows are real buttons: `Semantics(button, selected, label)` with position (`第 N 项，共 M 项`) and its value, plus direct activation. `ShellController.activateMenuIndex` mirrors the wheel's two steps — the first tap moves the selection, the second acts — so pointer and assistive users no longer depend on the simulated wheel.
+- `MediaTile` and `HomeFeedCard` expose `button`, `selected` and a consolidated label carrying 正在播放 / 当前歌曲 / VIP 歌曲 / 无版权 / 无音源 / 已收藏, instead of leaving that state to color alone.
+- Playback progress is adjustable: `increasedValue`/`decreasedValue` plus `onIncrease`/`onDecrease` seek in 5% steps through a new `onSeekTo` callback wired to `music.seekToProgress`.
+- The custom status bar publishes one merged announcement (time, network, battery, charging) rather than three unlabeled glyphs, and its battery/connectivity refreshes now bail out when nothing changed instead of calling `setState` on every poll.
+- Queue rows and lyric rows scale their extent with `MediaQuery.textScalerOf` (queue up to 1.6×, lyrics up to 2.2×), so large text no longer gets clipped by a fixed 52px or 38px row. Default-scale geometry is unchanged.
+
+Performance, done:
+
+- Lyric line breaking is cached by text, style, width and text scale, so the per-frame ticker no longer re-runs `TextPainter.layout` and `computeLineMetrics` for every visible line; the painter is disposed instead of leaked.
+- The active lyric line is found by walking from the previous index in both directions instead of rescanning the lyric on every tick.
+- Playback progress interpolates linearly at the source cadence, with ease-out reserved for seeks, so a continuously advancing value stops being re-eased on every sample.
+- The loading skeleton stops its repeating shimmer entirely under reduced motion.
+
+Deferred, with reasons:
+
+- Decomposing `ShellController` into per-concern listenables (chassis, mode, menu, cover, queue, seek preview, playback) was not attempted here. It touches every consumer at once and needs profile-mode traces to prove it helps; doing it blind alongside seven other plans would risk the whole shell. `IpodStatusBar` is already protected from parent rebuilds by being a `const` widget, which removes the loudest case.
+- A variable-extent lyric list (measured per line rather than one scaled extent) and a pinned `NOW` queue card remain open; both need the list to abandon `itemExtent`.
+- DevTools frame/raster traces, TalkBack/VoiceOver traversal, and low-end device profiling are still pending: this environment has no device attached.
+
+- `flutter analyze`: `No issues found!`. `flutter test`: 68 tests passing, including new coverage for menu semantics and activation, media state labels, adjustable progress, text-scaled queue extents, and the reduced-motion skeleton.

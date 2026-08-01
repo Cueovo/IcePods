@@ -21,6 +21,7 @@ class HomePanel extends StatefulWidget {
     this.railWidth = _defaultRailWidth,
     this.valueForEntry,
     this.descriptionForEntry,
+    this.onSelectIndex,
     super.key,
   });
 
@@ -32,6 +33,10 @@ class HomePanel extends StatefulWidget {
   final double railWidth;
   final String? Function(MenuEntry entry)? valueForEntry;
   final String Function(MenuEntry entry)? descriptionForEntry;
+
+  /// Direct activation for pointer and assistive users. The click wheel stays
+  /// the primary metaphor; this makes the same rows reachable without it.
+  final ValueChanged<int>? onSelectIndex;
 
   @override
   State<HomePanel> createState() => _HomePanelState();
@@ -148,6 +153,11 @@ class _HomePanelState extends State<HomePanel> {
                         entry: widget.page.entries[index],
                         selected: widget.selectedIndex == index,
                         reduceMotion: reduceMotion,
+                        position: index + 1,
+                        total: widget.page.entries.length,
+                        onTap: widget.onSelectIndex == null
+                            ? null
+                            : () => widget.onSelectIndex!(index),
                         value: widget.valueForEntry?.call(
                           widget.page.entries[index],
                         ),
@@ -211,12 +221,18 @@ class _MenuTile extends StatelessWidget {
     required this.entry,
     required this.selected,
     required this.reduceMotion,
+    required this.position,
+    required this.total,
+    required this.onTap,
     required this.value,
   });
 
   final MenuEntry entry;
   final bool selected;
   final bool reduceMotion;
+  final int position;
+  final int total;
+  final VoidCallback? onTap;
   final String? value;
 
   @override
@@ -226,111 +242,127 @@ class _MenuTile extends StatelessWidget {
     final feedback = reduceMotion
         ? AppDurations.reducedMotion
         : AppDurations.press;
-    return AnimatedContainer(
-      key: selected ? const ValueKey('menu-selection-indicator') : null,
-      duration: feedback,
-      curve: AppCurves.strongEaseOut,
-      height: _menuTileHeight,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: selected ? AppColors.glassMid : Colors.transparent,
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(
-          color: selected ? AppColors.interactionSoft : Colors.transparent,
-        ),
-        boxShadow: selected
-            ? const [
-                BoxShadow(
-                  color: Color(0x14000000),
-                  blurRadius: 12,
-                  offset: Offset(0, 3),
-                ),
-              ]
-            : const [],
-      ),
-      child: Row(
-        children: [
-          if (entry.action == MenuAction.chassisColor &&
-              entry.chassisColorValue != null)
-            Container(
-              width: 18,
-              height: 18,
-              margin: const EdgeInsets.only(right: 8),
-              decoration: BoxDecoration(
-                color: Color(entry.chassisColorValue!),
-                shape: BoxShape.circle,
-                border: Border.all(color: AppColors.textTertiary),
-              ),
-            )
-          else
-            AnimatedContainer(
-              duration: feedback,
-              curve: AppCurves.strongEaseOut,
-              width: 26,
-              height: 26,
-              margin: const EdgeInsets.only(right: 8),
-              decoration: BoxDecoration(
-                color: selected
-                    ? MenuArtwork.accentFor(entry).withValues(alpha: 0.42)
-                    : AppColors.glassLow,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: selected
-                      ? AppColors.textTertiary.withValues(alpha: .5)
-                      : AppColors.border,
-                ),
-              ),
-              child: Icon(
-                MenuArtwork.iconFor(entry),
-                size: 15,
-                color: selected
-                    ? AppColors.textPrimary
-                    : AppColors.textSecondary,
-              ),
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: value == null
+          ? '${entry.label}，第 $position 项，共 $total 项'
+          : '${entry.label}，$value，第 $position 项，共 $total 项',
+      onTap: onTap,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: AnimatedContainer(
+          key: selected ? const ValueKey('menu-selection-indicator') : null,
+          duration: feedback,
+          curve: AppCurves.strongEaseOut,
+          height: _menuTileHeight,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: selected ? AppColors.glassMid : Colors.transparent,
+            borderRadius: BorderRadius.circular(15),
+            border: Border.all(
+              color: selected ? AppColors.interactionSoft : Colors.transparent,
             ),
-          Expanded(
-            child: AnimatedDefaultTextStyle(
-              duration: feedback,
-              curve: AppCurves.strongEaseOut,
-              style: (selected ? AppTextStyles.label : AppTextStyles.body)
-                  .copyWith(letterSpacing: selected ? 0.1 : 0),
-              child: Text(
-                entry.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ),
-          if (value != null)
-            AnimatedSwitcher(
-              duration: feedback,
-              child: Text(
-                value!,
-                key: ValueKey(value),
-                style: (selected ? AppTextStyles.label : AppTextStyles.metadata)
-                    .copyWith(
-                      color: selected
-                          ? AppColors.textPrimary
-                          : AppColors.textSecondary,
+            boxShadow: selected
+                ? const [
+                    BoxShadow(
+                      color: Color(0x14000000),
+                      blurRadius: 12,
+                      offset: Offset(0, 3),
                     ),
+                  ]
+                : const [],
+          ),
+          child: Row(
+            children: [
+              if (entry.action == MenuAction.chassisColor &&
+                  entry.chassisColorValue != null)
+                Container(
+                  width: 18,
+                  height: 18,
+                  margin: const EdgeInsets.only(right: 8),
+                  decoration: BoxDecoration(
+                    color: Color(entry.chassisColorValue!),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppColors.textTertiary),
+                  ),
+                )
+              else
+                AnimatedContainer(
+                  duration: feedback,
+                  curve: AppCurves.strongEaseOut,
+                  width: 26,
+                  height: 26,
+                  margin: const EdgeInsets.only(right: 8),
+                  decoration: BoxDecoration(
+                    color: selected
+                        ? MenuArtwork.accentFor(entry).withValues(alpha: 0.42)
+                        : AppColors.glassLow,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: selected
+                          ? AppColors.textTertiary.withValues(alpha: .5)
+                          : AppColors.border,
+                    ),
+                  ),
+                  child: Icon(
+                    MenuArtwork.iconFor(entry),
+                    size: 15,
+                    color: selected
+                        ? AppColors.textPrimary
+                        : AppColors.textSecondary,
+                  ),
+                ),
+              Expanded(
+                child: AnimatedDefaultTextStyle(
+                  duration: feedback,
+                  curve: AppCurves.strongEaseOut,
+                  style: (selected ? AppTextStyles.label : AppTextStyles.body)
+                      .copyWith(letterSpacing: selected ? 0.1 : 0),
+                  child: Text(
+                    entry.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ),
-            )
-          else
-            AnimatedOpacity(
-              duration: feedback,
-              opacity: selected ? 1 : .28,
-              child: Icon(
-                switch (entry.action) {
-                  MenuAction.player => Icons.play_arrow_rounded,
-                  MenuAction.info || MenuAction.setting => Icons.tune_rounded,
-                  MenuAction.chassisColor => Icons.circle_outlined,
-                  _ => Icons.chevron_right_rounded,
-                },
-                color: Colors.white,
-                size: 16,
-              ),
-            ),
-        ],
+              if (value != null)
+                AnimatedSwitcher(
+                  duration: feedback,
+                  child: Text(
+                    value!,
+                    key: ValueKey(value),
+                    style:
+                        (selected
+                                ? AppTextStyles.label
+                                : AppTextStyles.metadata)
+                            .copyWith(
+                              color: selected
+                                  ? AppColors.textPrimary
+                                  : AppColors.textSecondary,
+                            ),
+                  ),
+                )
+              else
+                AnimatedOpacity(
+                  duration: feedback,
+                  opacity: selected ? 1 : .28,
+                  child: Icon(
+                    switch (entry.action) {
+                      MenuAction.player => Icons.play_arrow_rounded,
+                      MenuAction.info ||
+                      MenuAction.setting => Icons.tune_rounded,
+                      MenuAction.chassisColor => Icons.circle_outlined,
+                      _ => Icons.chevron_right_rounded,
+                    },
+                    color: Colors.white,
+                    size: 16,
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }
