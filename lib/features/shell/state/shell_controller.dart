@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:qqmusic_ipod/business/repositories/music_repository.dart';
@@ -21,12 +20,14 @@ class ShellController extends ChangeNotifier {
     required QqMusicApi api,
     QqMusicAudioHandler? audioHandler,
     ClickSoundService? clickSound,
+    WheelHapticsService? haptics,
     PageController? pageController,
     ChassisColorStore? chassisColorStore,
     AppSettingsStore? settingsStore,
     CustomBackgroundPicker? customBackgroundPicker,
   }) : music = QqMusicController(api: api, audioHandler: audioHandler),
        _clickSound = clickSound ?? ClickSoundService(),
+       _haptics = haptics ?? WheelHapticsService(),
        pageController = pageController ?? PageController(),
        _chassisColorStore = chassisColorStore ?? ChassisColorStore(),
        _settingsStore = settingsStore ?? AppSettingsStore(),
@@ -43,6 +44,7 @@ class ShellController extends ChangeNotifier {
 
   final QqMusicController music;
   final ClickSoundService _clickSound;
+  final WheelHapticsService _haptics;
   final PageController pageController;
   final ChassisColorStore _chassisColorStore;
   final AppSettingsStore _settingsStore;
@@ -286,19 +288,19 @@ class ShellController extends ChangeNotifier {
 
   void _mediumImpact() {
     if (hapticsEnabled) {
-      unawaited(HapticFeedback.mediumImpact());
+      unawaited(_haptics.mediumImpact());
     }
   }
 
   void _lightImpact() {
     if (hapticsEnabled) {
-      unawaited(HapticFeedback.lightImpact());
+      unawaited(_haptics.lightImpact());
     }
   }
 
   void _selectionClick() {
     if (hapticsEnabled) {
-      unawaited(HapticFeedback.selectionClick());
+      unawaited(_haptics.selectionClick());
     }
   }
 
@@ -815,6 +817,8 @@ class ShellController extends ChangeNotifier {
         notifyListeners();
         if (clickSoundEnabled) {
           await _clickSound.playTick();
+        } else {
+          _clickSound.clearPendingTicks();
         }
         await _saveSettings();
       case AppSetting.playbackQuality:
@@ -861,7 +865,7 @@ class ShellController extends ChangeNotifier {
         _settingFeedback[setting] = hapticsEnabled ? '触感反馈已开启。' : '触感反馈已关闭。';
         notifyListeners();
         if (hapticsEnabled) {
-          await HapticFeedback.mediumImpact();
+          await _haptics.mediumImpact();
         }
         await _saveSettings();
       case AppSetting.clearCache:

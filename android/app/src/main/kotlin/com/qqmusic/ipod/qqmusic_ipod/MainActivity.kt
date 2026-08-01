@@ -3,8 +3,10 @@ package com.qqmusic.ipod.qqmusic_ipod
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.media.AudioAttributes
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
+import android.media.SoundPool
 import android.os.Build
 import android.os.Bundle
 import android.view.View
@@ -19,19 +21,68 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : AudioServiceActivity() {
     private var insetsController: WindowInsetsControllerCompat? = null
+    private var audioOutputChannel: MethodChannel? = null
+    private var systemFeedbackChannel: MethodChannel? = null
+    private var soundPool: SoundPool? = null
+    private var clickSoundId = 0
+    private var clickSoundReady = false
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        MethodChannel(
+        audioOutputChannel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             "qqmusic_ipod/audio_output",
-        ).setMethodCallHandler { call, result ->
-            if (call.method == "getCurrentOutputName") {
-                result.success(currentOutputName())
-            } else {
-                result.notImplemented()
+        ).also { channel ->
+            channel.setMethodCallHandler { call, result ->
+                if (call.method == "getCurrentOutputName") {
+                    result.success(currentOutputName())
+                } else {
+                    result.notImplemented()
+                }
             }
         }
+        initializeClickSound()
+        systemFeedbackChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "qqmusic_ipod/system_feedback",
+        ).also { channel ->
+            channel.setMethodCallHandler { call, result ->
+                if (call.method == "playClick") {
+                    playClick()
+                    result.success(null)
+                } else {
+                    result.notImplemented()
+                }
+            }
+        }
+    }
+
+    private fun initializeClickSound() {
+        releaseClickSound()
+        val pool = SoundPool.Builder()
+            .setMaxStreams(6)
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build(),
+            )
+            .build()
+        pool.setOnLoadCompleteListener { _, _, status ->
+            clickSoundReady = status == 0
+        }
+        clickSoundId = assets.openFd("flutter_assets/assets/sounds/click_tick.wav").use {
+            pool.load(it, 1)
+        }
+        soundPool = pool
+    }
+
+    private fun playClick() {
+        val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        if (audioManager.ringerMode != AudioManager.RINGER_MODE_NORMAL || !clickSoundReady) {
+            return
+        }
+        soundPool?.play(clickSoundId, 0.42f, 0.42f, 1, 0, 1f)
     }
 
     private fun currentOutputName(): String {
@@ -124,6 +175,28 @@ class MainActivity : AudioServiceActivity() {
             )
 
         hideSystemStatusBar()
+    }
+
+    override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        audioOutputChannel?.setMethodCallHandler(null)
+        systemFeedbackChannel?.setMethodCallHandler(null)
+        audioOutputChannel = null
+        systemFeedbackChannel = null
+        releaseClickSound()
+        super.cleanUpFlutterEngine(flutterEngine)
+    }
+
+    override fun onDestroy() {
+        releaseClickSound()
+        super.onDestroy()
+    }
+
+    private fun releaseClickSound() {
+        clickSoundReady = false
+        soundPool?.setOnLoadCompleteListener(null)
+        soundPool?.release()
+        soundPool = null
+        clickSoundId = 0
     }
 
     private fun hideSystemStatusBar() {
