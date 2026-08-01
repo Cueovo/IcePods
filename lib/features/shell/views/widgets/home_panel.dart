@@ -9,11 +9,16 @@ import 'package:qqmusic_ipod/features/shell/views/widgets/menu_artwork.dart';
 const double _menuTileHeight = 48;
 const double _menuTileGap = 5;
 const double _menuItemExtent = _menuTileHeight + _menuTileGap;
+const double _defaultRailWidth = 158;
+const double _minRailWidth = 132;
+const double _maxRailWidth = 190;
+const double _railGap = 15;
 
 class HomePanel extends StatefulWidget {
   const HomePanel({
     required this.page,
     required this.selectedIndex,
+    this.railWidth = _defaultRailWidth,
     this.valueForEntry,
     this.descriptionForEntry,
     super.key,
@@ -21,6 +26,10 @@ class HomePanel extends StatefulWidget {
 
   final MenuPage page;
   final int selectedIndex;
+
+  /// Width of the menu list column. Clamped so the preview keeps room on
+  /// narrow phones and does not become a thin strip on tablets.
+  final double railWidth;
   final String? Function(MenuEntry entry)? valueForEntry;
   final String Function(MenuEntry entry)? descriptionForEntry;
 
@@ -102,80 +111,96 @@ class _HomePanelState extends State<HomePanel> {
     return Padding(
       // No fixed bottom reserve — list padding clears the glass curve instead.
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 14),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 158,
-            // Click-wheel navigation owns scrolling; hide the thumb so it
-            // never sits against the selected tile highlight.
-            child: ScrollConfiguration(
-              behavior: ScrollConfiguration.of(
-                context,
-              ).copyWith(scrollbars: false),
-              child: ListView.separated(
-                key: ValueKey('menu-list-${widget.page.section.name}'),
-                controller: _menuController,
-                // Clear superellipse bottom so last menu row is fully visible.
-                padding: const EdgeInsets.only(bottom: 4),
-                clipBehavior: Clip.none,
-                physics: const ClampingScrollPhysics(),
-                itemCount: widget.page.entries.length,
-                separatorBuilder: (context, index) =>
-                    const SizedBox(height: _menuTileGap),
-                itemBuilder: (context, index) {
-                  return _MenuTile(
-                    entry: widget.page.entries[index],
-                    selected: widget.selectedIndex == index,
-                    reduceMotion: reduceMotion,
-                    value: widget.valueForEntry?.call(
-                      widget.page.entries[index],
-                    ),
-                  );
-                },
-              ),
-            ),
-          ),
-          const SizedBox(width: 15),
-          Expanded(
-            child: AnimatedSwitcher(
-              duration: reduceMotion
-                  ? AppDurations.reducedMotion
-                  : AppDurations.quick,
-              layoutBuilder: (currentChild, previousChildren) => Stack(
-                fit: StackFit.expand,
-                children: [
-                  if (previousChildren.isNotEmpty) previousChildren.last,
-                  ?currentChild,
-                ],
-              ),
-              transitionBuilder: (child, animation) {
-                // Fade the outgoing card out early: two opaque preview cards
-                // stacked in the same plane read as a double exposure.
-                final opacity = CurvedAnimation(
-                  parent: animation,
-                  curve: AppCurves.sceneEase,
-                );
-                if (reduceMotion) {
-                  return FadeTransition(opacity: opacity, child: child);
-                }
-                return FadeTransition(
-                  opacity: opacity,
-                  child: ScaleTransition(
-                    scale: Tween<double>(begin: .985, end: 1).animate(opacity),
-                    child: child,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // Never let the rail eat more than half of the available width.
+          final available = constraints.maxWidth.isFinite
+              ? constraints.maxWidth
+              : _defaultRailWidth * 2;
+          final railWidth = widget.railWidth
+              .clamp(_minRailWidth, _maxRailWidth)
+              .clamp(_minRailWidth, (available - _railGap) * .56)
+              .toDouble();
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: railWidth,
+                // Click-wheel navigation owns scrolling; hide the thumb so it
+                // never sits against the selected tile highlight.
+                child: ScrollConfiguration(
+                  behavior: ScrollConfiguration.of(
+                    context,
+                  ).copyWith(scrollbars: false),
+                  child: ListView.separated(
+                    key: ValueKey('menu-list-${widget.page.section.name}'),
+                    controller: _menuController,
+                    // Clear superellipse bottom so last menu row is fully
+                    // visible.
+                    padding: const EdgeInsets.only(bottom: 4),
+                    clipBehavior: Clip.none,
+                    physics: const ClampingScrollPhysics(),
+                    itemCount: widget.page.entries.length,
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(height: _menuTileGap),
+                    itemBuilder: (context, index) {
+                      return _MenuTile(
+                        entry: widget.page.entries[index],
+                        selected: widget.selectedIndex == index,
+                        reduceMotion: reduceMotion,
+                        value: widget.valueForEntry?.call(
+                          widget.page.entries[index],
+                        ),
+                      );
+                    },
                   ),
-                );
-              },
-              child: _PreviewCard(
-                key: ValueKey(selected.id),
-                entry: selected,
-                value: selectedValue,
-                description: selectedDescription,
+                ),
               ),
-            ),
-          ),
-        ],
+              const SizedBox(width: _railGap),
+              Expanded(
+                child: AnimatedSwitcher(
+                  duration: reduceMotion
+                      ? AppDurations.reducedMotion
+                      : AppDurations.quick,
+                  layoutBuilder: (currentChild, previousChildren) => Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      if (previousChildren.isNotEmpty) previousChildren.last,
+                      ?currentChild,
+                    ],
+                  ),
+                  transitionBuilder: (child, animation) {
+                    // Fade the outgoing card out early: two opaque preview cards
+                    // stacked in the same plane read as a double exposure.
+                    final opacity = CurvedAnimation(
+                      parent: animation,
+                      curve: AppCurves.sceneEase,
+                    );
+                    if (reduceMotion) {
+                      return FadeTransition(opacity: opacity, child: child);
+                    }
+                    return FadeTransition(
+                      opacity: opacity,
+                      child: ScaleTransition(
+                        scale: Tween<double>(
+                          begin: .985,
+                          end: 1,
+                        ).animate(opacity),
+                        child: child,
+                      ),
+                    );
+                  },
+                  child: _PreviewCard(
+                    key: ValueKey(selected.id),
+                    entry: selected,
+                    value: selectedValue,
+                    description: selectedDescription,
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

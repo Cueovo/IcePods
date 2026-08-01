@@ -20,6 +20,7 @@ class ClickWheel extends StatefulWidget {
     required this.onNext,
     required this.onPlayPause,
     required this.isPlaying,
+    this.diameter = _size,
     super.key,
   });
 
@@ -32,12 +33,18 @@ class ClickWheel extends StatefulWidget {
   final VoidCallback onPlayPause;
   final bool isPlaying;
 
+  /// Painted size. The wheel is authored at [_size] and scaled uniformly, so
+  /// hit testing keeps working in the authored coordinate space.
+  final double diameter;
+
   @override
   State<ClickWheel> createState() => _ClickWheelState();
 }
 
+/// Authored wheel geometry. Everything inside the wheel measures against this.
+const double _size = 300;
+
 class _ClickWheelState extends State<ClickWheel> {
-  static const double _size = 300;
   static const double _center = _size / 2;
   static const double _centerRadius = 50;
   static const double _ringHitMin = 52;
@@ -181,190 +188,196 @@ class _ClickWheelState extends State<ClickWheel> {
     final reduceMotion =
         MediaQuery.maybeOf(context)?.disableAnimations ?? false;
 
-    return Listener(
-      key: const ValueKey('center-button'),
-      behavior: HitTestBehavior.opaque,
-      onPointerDown: _handlePointerDown,
-      onPointerMove: _handlePointerMove,
-      onPointerUp: _handlePointerUp,
-      onPointerCancel: _handlePointerCancel,
-      child: SizedBox(
-        width: _size,
-        height: _size,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            // 1. 底层：灰色塑料触摸环 (The Wheel)
-            IgnorePointer(
-              child: Container(
-                key: const ValueKey('click-wheel'),
-                width: _size,
-                height: _size,
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Color(0xFFE5E5EA),
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Color(0xFFEBEBF0), // 柔和受光面
-                      Color(0xFFE0E0E6), // 亚光基础色
-                      Color(0xFFD4D4DA), // 柔和背光面
-                    ],
-                  ),
-                  boxShadow: [
-                    // 模拟面板与机身的缝隙（内陷的边缘阴影）
-                    BoxShadow(
-                      color: Color(0x33000000),
-                      blurRadius: 4,
-                      spreadRadius: 0.5,
-                      offset: Offset(0, 1),
-                    ),
-                    // 左上角的高光反光
-                    BoxShadow(
-                      color: Color(0x80FFFFFF),
-                      blurRadius: 6,
-                      spreadRadius: -2,
-                      offset: Offset(-2, -2),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            // 2. 丝印图标与文字层
-            // MENU
-            Positioned(
-              top: 14,
-              child: _WheelButton(
-                key: const ValueKey('menu-button'),
-                label: '返回菜单',
-                onTap: widget.onMenu,
-                pressed: _pressed == _WheelPress.menu,
-                reduceMotion: reduceMotion,
-                child: const Text(
-                  'MENU',
-                  style: TextStyle(
-                    color: labelColor,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 2.0,
-                    height: 1,
-                  ),
-                ),
-              ),
-            ),
-            // Previous (|<<)
-            Positioned(
-              left: 14,
-              top: (_size - 64) / 2, // 垂直居中
-              child: _WheelButton(
-                label: '上一首',
-                onTap: widget.onPrevious,
-                pressed: _pressed == _WheelPress.previous,
-                reduceMotion: reduceMotion,
-                child: const Icon(
-                  Icons.skip_previous_rounded,
-                  color: labelColor,
-                  size: 28,
-                ),
-              ),
-            ),
-            // Next (>>|)
-            Positioned(
-              right: 14,
-              top: (_size - 64) / 2, // 垂直居中
-              child: _WheelButton(
-                label: '下一首',
-                onTap: widget.onNext,
-                pressed: _pressed == _WheelPress.next,
-                reduceMotion: reduceMotion,
-                child: const Icon(
-                  Icons.skip_next_rounded,
-                  color: labelColor,
-                  size: 28,
-                ),
-              ),
-            ),
-            // Play / Pause (动态切换)
-            Positioned(
-              bottom: 14,
-              child: _WheelButton(
-                label: widget.isPlaying ? '暂停' : '播放',
-                onTap: widget.onPlayPause,
-                pressed: _pressed == _WheelPress.playPause,
-                reduceMotion: reduceMotion,
-                child: Icon(
-                  widget.isPlaying
-                      ? Icons.pause_rounded
-                      : Icons.play_arrow_rounded,
-                  color: labelColor,
-                  size: 32, // 稍微放大一点，视觉上与上/下首图标平衡
-                ),
-              ),
-            ),
-
-            // 3. 顶层：中心确认键 (Center Button)
-            Semantics(
-              button: true,
-              label: '确认',
-              onTap: widget.onCenter,
-              child: IgnorePointer(
-                child: _PressFeedback(
-                  pressed: _pressed == _WheelPress.center,
-                  reduceMotion: reduceMotion,
-                  child: AnimatedContainer(
-                    duration: _pressed == _WheelPress.center
-                        ? AppDurations.press
-                        : _releaseDuration,
-                    curve: AppCurves.strongEaseOut,
-                    width: _centerRadius * 2,
-                    height: _centerRadius * 2,
-                    decoration: BoxDecoration(
+    return SizedBox.square(
+      dimension: widget.diameter,
+      child: FittedBox(
+        fit: BoxFit.contain,
+        child: Listener(
+          key: const ValueKey('center-button'),
+          behavior: HitTestBehavior.opaque,
+          onPointerDown: _handlePointerDown,
+          onPointerMove: _handlePointerMove,
+          onPointerUp: _handlePointerUp,
+          onPointerCancel: _handlePointerCancel,
+          child: SizedBox(
+            width: _size,
+            height: _size,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                // 1. 底层：灰色塑料触摸环 (The Wheel)
+                IgnorePointer(
+                  child: Container(
+                    key: const ValueKey('click-wheel'),
+                    width: _size,
+                    height: _size,
+                    decoration: const BoxDecoration(
                       shape: BoxShape.circle,
-                      color: const Color(0xFFF9F9FB),
+                      color: Color(0xFFE5E5EA),
                       gradient: LinearGradient(
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
-                        colors: _pressed == _WheelPress.center
-                            ? const [
-                                Color(0xFFF4F4F8),
-                                Color(0xFFEBEBF1),
-                                Color(0xFFDEDEE6),
-                              ]
-                            : const [
-                                Color(0xFFFFFFFF),
-                                Color(0xFFF4F4F8),
-                                Color(0xFFE8E8EE),
-                              ],
+                        colors: [
+                          Color(0xFFEBEBF0), // 柔和受光面
+                          Color(0xFFE0E0E6), // 亚光基础色
+                          Color(0xFFD4D4DA), // 柔和背光面
+                        ],
                       ),
-                      // 模拟中心按键与转盘之间的物理间隙
-                      border: Border.all(
-                        color: const Color(0x1F000000),
-                        width: 1.2,
-                      ),
-                      // Pressed domes sit closer to the panel: tighter shadow.
-                      boxShadow: _pressed == _WheelPress.center
-                          ? const [
-                              BoxShadow(
-                                color: Color(0x2E000000),
-                                blurRadius: 2,
-                                offset: Offset(0, 0.5),
-                              ),
-                            ]
-                          : const [
-                              BoxShadow(
-                                color: Color(0x22000000),
-                                blurRadius: 4,
-                                offset: Offset(0, 1),
-                              ),
-                            ],
+                      boxShadow: [
+                        // 模拟面板与机身的缝隙（内陷的边缘阴影）
+                        BoxShadow(
+                          color: Color(0x33000000),
+                          blurRadius: 4,
+                          spreadRadius: 0.5,
+                          offset: Offset(0, 1),
+                        ),
+                        // 左上角的高光反光
+                        BoxShadow(
+                          color: Color(0x80FFFFFF),
+                          blurRadius: 6,
+                          spreadRadius: -2,
+                          offset: Offset(-2, -2),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-              ),
+
+                // 2. 丝印图标与文字层
+                // MENU
+                Positioned(
+                  top: 14,
+                  child: _WheelButton(
+                    key: const ValueKey('menu-button'),
+                    label: '返回菜单',
+                    onTap: widget.onMenu,
+                    pressed: _pressed == _WheelPress.menu,
+                    reduceMotion: reduceMotion,
+                    child: const Text(
+                      'MENU',
+                      style: TextStyle(
+                        color: labelColor,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 2.0,
+                        height: 1,
+                      ),
+                    ),
+                  ),
+                ),
+                // Previous (|<<)
+                Positioned(
+                  left: 14,
+                  top: (_size - 64) / 2, // 垂直居中
+                  child: _WheelButton(
+                    label: '上一首',
+                    onTap: widget.onPrevious,
+                    pressed: _pressed == _WheelPress.previous,
+                    reduceMotion: reduceMotion,
+                    child: const Icon(
+                      Icons.skip_previous_rounded,
+                      color: labelColor,
+                      size: 28,
+                    ),
+                  ),
+                ),
+                // Next (>>|)
+                Positioned(
+                  right: 14,
+                  top: (_size - 64) / 2, // 垂直居中
+                  child: _WheelButton(
+                    label: '下一首',
+                    onTap: widget.onNext,
+                    pressed: _pressed == _WheelPress.next,
+                    reduceMotion: reduceMotion,
+                    child: const Icon(
+                      Icons.skip_next_rounded,
+                      color: labelColor,
+                      size: 28,
+                    ),
+                  ),
+                ),
+                // Play / Pause (动态切换)
+                Positioned(
+                  bottom: 14,
+                  child: _WheelButton(
+                    label: widget.isPlaying ? '暂停' : '播放',
+                    onTap: widget.onPlayPause,
+                    pressed: _pressed == _WheelPress.playPause,
+                    reduceMotion: reduceMotion,
+                    child: Icon(
+                      widget.isPlaying
+                          ? Icons.pause_rounded
+                          : Icons.play_arrow_rounded,
+                      color: labelColor,
+                      size: 32, // 稍微放大一点，视觉上与上/下首图标平衡
+                    ),
+                  ),
+                ),
+
+                // 3. 顶层：中心确认键 (Center Button)
+                Semantics(
+                  button: true,
+                  label: '确认',
+                  onTap: widget.onCenter,
+                  child: IgnorePointer(
+                    child: _PressFeedback(
+                      pressed: _pressed == _WheelPress.center,
+                      reduceMotion: reduceMotion,
+                      child: AnimatedContainer(
+                        duration: _pressed == _WheelPress.center
+                            ? AppDurations.press
+                            : _releaseDuration,
+                        curve: AppCurves.strongEaseOut,
+                        width: _centerRadius * 2,
+                        height: _centerRadius * 2,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: const Color(0xFFF9F9FB),
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: _pressed == _WheelPress.center
+                                ? const [
+                                    Color(0xFFF4F4F8),
+                                    Color(0xFFEBEBF1),
+                                    Color(0xFFDEDEE6),
+                                  ]
+                                : const [
+                                    Color(0xFFFFFFFF),
+                                    Color(0xFFF4F4F8),
+                                    Color(0xFFE8E8EE),
+                                  ],
+                          ),
+                          // 模拟中心按键与转盘之间的物理间隙
+                          border: Border.all(
+                            color: const Color(0x1F000000),
+                            width: 1.2,
+                          ),
+                          // Pressed domes sit closer to the panel: tighter shadow.
+                          boxShadow: _pressed == _WheelPress.center
+                              ? const [
+                                  BoxShadow(
+                                    color: Color(0x2E000000),
+                                    blurRadius: 2,
+                                    offset: Offset(0, 0.5),
+                                  ),
+                                ]
+                              : const [
+                                  BoxShadow(
+                                    color: Color(0x22000000),
+                                    blurRadius: 4,
+                                    offset: Offset(0, 1),
+                                  ),
+                                ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

@@ -9,6 +9,7 @@ import 'package:qqmusic_ipod/core/audio/audio_handler.dart';
 import 'package:qqmusic_ipod/core/theme/tokens/app_tokens.dart';
 import 'package:qqmusic_ipod/core/theme/tokens/ipod_shell_theme.dart';
 import 'package:qqmusic_ipod/core/theme/widgets/click_wheel.dart';
+import 'package:qqmusic_ipod/core/utils/shell_layout_metrics.dart';
 import 'package:qqmusic_ipod/features/player/state/controller.dart';
 import 'package:qqmusic_ipod/features/player/views/pages/now_playing_panel.dart';
 import 'package:qqmusic_ipod/features/player/views/widgets/cover_flow_panel.dart';
@@ -124,6 +125,7 @@ class _IpodShellView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
+    final metrics = ShellLayoutMetrics.resolve(media);
     // One motion policy: the controller drives page flights with the same
     // reduced-motion setting the widgets read.
     shell.syncReducedMotion(media.disableAnimations);
@@ -177,188 +179,221 @@ class _IpodShellView extends StatelessWidget {
         color: backdrop,
         child: Padding(
           // Bottom keeps home-indicator safe area; top is cutout-aware.
+          // Landscape adds the side safe areas the vertical stack never needed.
           padding: EdgeInsets.only(
             top: chassisInsets.topOuter,
             bottom: media.padding.bottom,
-            left: 0,
-            right: 0,
+            left: metrics.isLandscape ? media.padding.left : 0,
+            right: metrics.isLandscape ? media.padding.right : 0,
           ),
-          child: Column(
-            children: [
-              Expanded(
-                flex: 56,
-                child: Padding(
-                  // Inset on all sides so continuous corners + bezel sit on chassis.
-                  // Top scales down on notch/island (status bar already tall inside).
-                  padding: chassisInsets.screenFramePadding,
-                  child: DecoratedBox(
-                    key: const ValueKey('ipod-screen-frame'),
-                    decoration: ShapeDecoration(
-                      // Bezel fill stays darker than the chassis.
-                      color: frame.bezel,
-                      shape: RoundedSuperellipseBorder(
-                        borderRadius: outerRadius,
-                      ),
-                    ),
+          // Tablets and large windows centre a bounded chassis instead of
+          // stretching every child across the whole display.
+          child: Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: metrics.maxChassisWidth,
+                maxHeight: metrics.maxChassisHeight,
+              ),
+              child: Flex(
+                key: const ValueKey('ipod-chassis-layout'),
+                direction: metrics.isLandscape
+                    ? Axis.horizontal
+                    : Axis.vertical,
+                children: [
+                  Expanded(
+                    flex: metrics.screenFlex,
                     child: Padding(
-                      key: const ValueKey('ipod-screen-bezel-padding'),
-                      // Thicker top bezel only when insets request it; sides stay even.
-                      padding: bezelPadding,
+                      // Inset on all sides so continuous corners + bezel sit on chassis.
+                      // Top scales down on notch/island (status bar already tall inside).
+                      padding: chassisInsets.screenFramePadding,
                       child: DecoratedBox(
-                        key: const ValueKey('ipod-screen-glass'),
+                        key: const ValueKey('ipod-screen-frame'),
                         decoration: ShapeDecoration(
+                          // Bezel fill stays darker than the chassis.
+                          color: frame.bezel,
                           shape: RoundedSuperellipseBorder(
-                            borderRadius: glassRadius,
-                            side: BorderSide(
-                              color: frame.innerRim,
-                              width: glassRimWidth,
-                            ),
+                            borderRadius: outerRadius,
                           ),
                         ),
-                        child: ClipRSuperellipse(
-                          borderRadius: glassRadius,
-                          child: MediaQuery(
-                            data: glassMedia,
-                            child: Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                // Ambient / glow only inside the screen.
-                                if (!shell.hasCustomBackground &&
-                                    (shell.mode == PlayerMode.feature ||
-                                        shell.mode == PlayerMode.queue))
-                                  DecoratedBox(
-                                    decoration: BoxDecoration(
-                                      gradient: RadialGradient(
-                                        center: const Alignment(-.55, -.7),
-                                        radius: 1.25,
-                                        colors: [
-                                          theme.featureGlow,
-                                          theme.scaffoldBackground,
-                                        ],
-                                      ),
-                                    ),
-                                  )
-                                else
-                                  AmbientBackground(
-                                    imageUrl: shell.ambientImageUrl,
-                                    customImagePath: shell.customBackgroundPath,
-                                  ),
-                                // Soft mid-screen dim only — fade out before the
-                                // bottom so the frame edge stays crisp.
-                                const DecoratedBox(
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      begin: Alignment.topCenter,
-                                      end: Alignment.bottomCenter,
-                                      colors: [
-                                        Color(0x00000000),
-                                        Color(0x14000000),
-                                        Color(0x2E000000),
-                                        Color(0x00000000),
-                                      ],
-                                      stops: [0, .32, .62, 1],
-                                    ),
-                                  ),
+                        child: Padding(
+                          key: const ValueKey('ipod-screen-bezel-padding'),
+                          // Thicker top bezel only when insets request it; sides stay even.
+                          padding: bezelPadding,
+                          child: DecoratedBox(
+                            key: const ValueKey('ipod-screen-glass'),
+                            decoration: ShapeDecoration(
+                              shape: RoundedSuperellipseBorder(
+                                borderRadius: glassRadius,
+                                side: BorderSide(
+                                  color: frame.innerRim,
+                                  width: glassRimWidth,
                                 ),
-                                Column(
+                              ),
+                            ),
+                            child: ClipRSuperellipse(
+                              borderRadius: glassRadius,
+                              child: MediaQuery(
+                                data: glassMedia,
+                                child: Stack(
+                                  fit: StackFit.expand,
                                   children: [
-                                    if (chassisInsets.glassContentTop > 0)
-                                      SizedBox(
-                                        height: chassisInsets.glassContentTop,
+                                    // Ambient / glow only inside the screen.
+                                    if (!shell.hasCustomBackground &&
+                                        (shell.mode == PlayerMode.feature ||
+                                            shell.mode == PlayerMode.queue))
+                                      DecoratedBox(
+                                        decoration: BoxDecoration(
+                                          gradient: RadialGradient(
+                                            center: const Alignment(-.55, -.7),
+                                            radius: 1.25,
+                                            colors: [
+                                              theme.featureGlow,
+                                              theme.scaffoldBackground,
+                                            ],
+                                          ),
+                                        ),
+                                      )
+                                    else
+                                      AmbientBackground(
+                                        imageUrl: shell.ambientImageUrl,
+                                        customImagePath:
+                                            shell.customBackgroundPath,
                                       ),
-                                    const IpodStatusBar(),
-                                    Expanded(
-                                      child: PageView(
-                                        key: const ValueKey('display-section'),
-                                        controller: shell.pageController,
-                                        physics:
-                                            const NeverScrollableScrollPhysics(),
-                                        children: [
-                                          _MenuPageTransition(
-                                            page: shell.currentMenuPage,
-                                            selectedIndex: shell.menuIndex,
-                                            menuDepth: shell.menuPath.length,
-                                            valueForEntry:
-                                                shell.valueForMenuEntry,
-                                            descriptionForEntry:
-                                                shell.descriptionForMenuEntry,
+                                    // Soft mid-screen dim only — fade out before the
+                                    // bottom so the frame edge stays crisp.
+                                    const DecoratedBox(
+                                      decoration: BoxDecoration(
+                                        gradient: LinearGradient(
+                                          begin: Alignment.topCenter,
+                                          end: Alignment.bottomCenter,
+                                          colors: [
+                                            Color(0x00000000),
+                                            Color(0x14000000),
+                                            Color(0x2E000000),
+                                            Color(0x00000000),
+                                          ],
+                                          stops: [0, .32, .62, 1],
+                                        ),
+                                      ),
+                                    ),
+                                    Column(
+                                      children: [
+                                        if (chassisInsets.glassContentTop > 0)
+                                          SizedBox(
+                                            height:
+                                                chassisInsets.glassContentTop,
                                           ),
-                                          CoverFlowPanel(
-                                            selectedIndex: shell.coverIndex,
-                                            albums: shell.coverAlbums,
-                                          ),
-                                          _NowPlayingHost(shell: shell),
-                                          if (shell.activeFeature != null)
-                                            FeaturePanel(
-                                              entry: shell.activeFeature!,
-                                              controller: shell.music,
-                                              isActive:
-                                                  shell.mode ==
-                                                  PlayerMode.feature,
-                                              onOpenLyrics:
-                                                  shell.openPlayerLyrics,
-                                              onOpenQueue: shell.openQueue,
-                                            )
-                                          else
-                                            const SizedBox.shrink(),
-                                          PlaybackQueuePanel(
-                                            queue: shell.music.playbackQueue,
-                                            currentIndex: shell
-                                                .music
-                                                .currentPlaybackQueueIndex,
-                                            selectedIndex:
-                                                shell.selectedQueueIndex,
-                                            isPlaying: shell.music.isPlaying,
-                                            playbackError:
-                                                shell.music.playbackError,
-                                            onPlayIndex: (index) => unawaited(
-                                              shell.playQueueIndex(index),
+                                        const IpodStatusBar(),
+                                        Expanded(
+                                          child: PageView(
+                                            key: const ValueKey(
+                                              'display-section',
                                             ),
-                                            onRemoveIndex:
-                                                shell.removeQueueIndex,
-                                            onClearUpcoming:
-                                                shell.clearUpcomingQueue,
+                                            controller: shell.pageController,
+                                            physics:
+                                                const NeverScrollableScrollPhysics(),
+                                            children: [
+                                              _MenuPageTransition(
+                                                page: shell.currentMenuPage,
+                                                selectedIndex: shell.menuIndex,
+                                                menuDepth:
+                                                    shell.menuPath.length,
+                                                railWidth:
+                                                    metrics.menuRailWidth,
+                                                valueForEntry:
+                                                    shell.valueForMenuEntry,
+                                                descriptionForEntry: shell
+                                                    .descriptionForMenuEntry,
+                                              ),
+                                              CoverFlowPanel(
+                                                selectedIndex: shell.coverIndex,
+                                                albums: shell.coverAlbums,
+                                              ),
+                                              _NowPlayingHost(shell: shell),
+                                              if (shell.activeFeature != null)
+                                                FeaturePanel(
+                                                  entry: shell.activeFeature!,
+                                                  controller: shell.music,
+                                                  isActive:
+                                                      shell.mode ==
+                                                      PlayerMode.feature,
+                                                  onOpenLyrics:
+                                                      shell.openPlayerLyrics,
+                                                  onOpenQueue: shell.openQueue,
+                                                )
+                                              else
+                                                const SizedBox.shrink(),
+                                              PlaybackQueuePanel(
+                                                queue:
+                                                    shell.music.playbackQueue,
+                                                currentIndex: shell
+                                                    .music
+                                                    .currentPlaybackQueueIndex,
+                                                selectedIndex:
+                                                    shell.selectedQueueIndex,
+                                                isPlaying:
+                                                    shell.music.isPlaying,
+                                                playbackError:
+                                                    shell.music.playbackError,
+                                                onPlayIndex: (index) =>
+                                                    unawaited(
+                                                      shell.playQueueIndex(
+                                                        index,
+                                                      ),
+                                                    ),
+                                                onRemoveIndex:
+                                                    shell.removeQueueIndex,
+                                                onClearUpcoming:
+                                                    shell.clearUpcomingQueue,
+                                              ),
+                                            ],
                                           ),
-                                        ],
-                                      ),
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 ),
-                              ],
+                              ),
                             ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ),
-              if (!keyboardVisible)
-                Expanded(
-                  flex: 44,
-                  child: Align(
-                    // Lower the wheel a bit so the larger screen has breathing room.
-                    alignment: const Alignment(0, -0.12),
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Transform.scale(
-                        scale: .9,
-                        child: ClickWheel(
-                          onRotate: shell.handleRotate,
-                          onRotationEnd: () =>
-                              unawaited(shell.handleRotationEnd()),
-                          onCenter: shell.handleCenter,
-                          onMenu: shell.handleMenu,
-                          onPrevious: () => shell.stepSelection(-1),
-                          onNext: () => shell.stepSelection(1),
-                          onPlayPause: shell.togglePlayback,
-                          isPlaying: shell.wheelIsPlaying,
-                        ),
+                  if (!keyboardVisible)
+                    Expanded(
+                      flex: metrics.wheelFlex,
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          // Wheel size follows its band instead of a fixed 300.
+                          final diameter = metrics.wheelDiameterFor(
+                            Size(constraints.maxWidth, constraints.maxHeight),
+                          );
+                          return Align(
+                            // Portrait lowers the wheel slightly so the larger
+                            // screen has breathing room; landscape centres it.
+                            alignment: metrics.isLandscape
+                                ? Alignment.center
+                                : const Alignment(0, -0.12),
+                            child: ClickWheel(
+                              diameter: diameter,
+                              onRotate: shell.handleRotate,
+                              onRotationEnd: () =>
+                                  unawaited(shell.handleRotationEnd()),
+                              onCenter: shell.handleCenter,
+                              onMenu: shell.handleMenu,
+                              onPrevious: () => shell.stepSelection(-1),
+                              onNext: () => shell.stepSelection(1),
+                              onPlayPause: shell.togglePlayback,
+                              isPlaying: shell.wheelIsPlaying,
+                            ),
+                          );
+                        },
                       ),
                     ),
-                  ),
-                ),
-            ],
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -387,6 +422,7 @@ class _MenuPageTransition extends StatefulWidget {
     required this.page,
     required this.selectedIndex,
     required this.menuDepth,
+    required this.railWidth,
     required this.valueForEntry,
     required this.descriptionForEntry,
   });
@@ -394,6 +430,7 @@ class _MenuPageTransition extends StatefulWidget {
   final MenuPage page;
   final int selectedIndex;
   final int menuDepth;
+  final double railWidth;
   final String? Function(MenuEntry entry) valueForEntry;
   final String Function(MenuEntry entry) descriptionForEntry;
 
@@ -476,6 +513,7 @@ class _MenuPageTransitionState extends State<_MenuPageTransition> {
           child: HomePanel(
             page: widget.page,
             selectedIndex: widget.selectedIndex,
+            railWidth: widget.railWidth,
             valueForEntry: widget.valueForEntry,
             descriptionForEntry: widget.descriptionForEntry,
           ),

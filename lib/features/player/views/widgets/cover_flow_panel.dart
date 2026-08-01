@@ -45,35 +45,60 @@ class CoverFlowPanel extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final stageHeight = math
-            .min(235.0, math.max(160.0, constraints.maxHeight - 72))
-            .toDouble();
-        final metaGap = stageHeight < 200 ? 10.0 : 18.0;
+        final metaGap = constraints.maxHeight < 260 ? 10.0 : 18.0;
+        final metaWidth = constraints.maxWidth.isFinite
+            ? math.min(288.0, constraints.maxWidth - 24)
+            : 288.0;
         return Column(
           mainAxisAlignment: MainAxisAlignment.start,
           children: [
-            // 3D 舞台
-            SizedBox(
-              height: stageHeight,
-              width: double.infinity,
-              // 【核心修复 1】：全局透视摄像机！
-              // 正数的 0.00125 完美等价于 HTML 的 perspective: 800px
-              child: Transform(
-                alignment: Alignment.center,
-                transform: Matrix4.identity()..setEntry(3, 2, 0.00125),
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  alignment: Alignment.center,
-                  children: [
-                    for (final index in paintOrder)
-                      _CoverFlowItem(
-                        key: ValueKey('cover-$index'),
-                        album: albums[index],
-                        offset: index - safeIndex,
-                        reduceMotion: reduceMotion,
+            // 3D 舞台：占据除元数据之外的全部高度，短屏也不会压到文字。
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, stage) {
+                  final stageHeight = stage.maxHeight.isFinite
+                      ? stage.maxHeight
+                      : 200.0;
+                  final stageWidth = stage.maxWidth.isFinite
+                      ? stage.maxWidth
+                      : 320.0;
+                  // Card leaves room for its reflection below the centre line.
+                  final cardSize = math
+                      .min(stageHeight * .58, stageWidth * .42)
+                      .clamp(72.0, 168.0)
+                      .toDouble();
+                  // Reflection is clipped to the floor plane of the stage
+                  // instead of a fixed pixel height, so it never reaches the
+                  // metadata on short viewports.
+                  final reflectionHeight = math
+                      .max(0.0, (stageHeight - cardSize) / 2 - 4)
+                      .clamp(0.0, cardSize)
+                      .toDouble();
+                  return SizedBox(
+                    width: double.infinity,
+                    // 【核心修复 1】：全局透视摄像机！
+                    // 正数的 0.00125 完美等价于 HTML 的 perspective: 800px
+                    child: Transform(
+                      alignment: Alignment.center,
+                      transform: Matrix4.identity()..setEntry(3, 2, 0.00125),
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        alignment: Alignment.center,
+                        children: [
+                          for (final index in paintOrder)
+                            _CoverFlowItem(
+                              key: ValueKey('cover-$index'),
+                              album: albums[index],
+                              offset: index - safeIndex,
+                              reduceMotion: reduceMotion,
+                              cardSize: cardSize,
+                              reflectionHeight: reflectionHeight,
+                            ),
+                        ],
                       ),
-                  ],
-                ),
+                    ),
+                  );
+                },
               ),
             ),
             SizedBox(height: metaGap),
@@ -100,7 +125,7 @@ class CoverFlowPanel extends StatelessWidget {
               },
               child: SizedBox(
                 key: ValueKey(safeIndex),
-                width: 288,
+                width: metaWidth,
                 child: Column(
                   children: [
                     Text(
@@ -134,16 +159,27 @@ class _CoverFlowItem extends StatelessWidget {
     required this.album,
     required this.offset,
     required this.reduceMotion,
+    required this.cardSize,
+    required this.reflectionHeight,
     super.key,
   });
+
+  /// Authored card size all the 3D constants were tuned against.
+  static const double _referenceCard = 140;
 
   final Album album;
   final int offset;
   final bool reduceMotion;
+  final double cardSize;
+  final double reflectionHeight;
 
   @override
   Widget build(BuildContext context) {
     final targetOffset = offset.toDouble();
+    // Geometry scales with the card so the stage keeps its proportions on
+    // every viewport instead of assuming a 140px cover.
+    final cardScale = cardSize / _referenceCard;
+    final decodeSize = (cardSize + 4).round();
 
     return TweenAnimationBuilder<double>(
       tween: Tween<double>(end: targetOffset),
@@ -160,7 +196,9 @@ class _CoverFlowItem extends StatelessWidget {
 
         // 1. X轴位移：中心0，侧边第一张 105，后续每张堆叠 25
         final translateX =
-            direction * (sideProgress * 105.0 + extraDistance * 25.0);
+            direction *
+            (sideProgress * 105.0 + extraDistance * 25.0) *
+            cardScale;
 
         // 2. Flutter 的 Z 轴方向与 CSS 透视相反，因此 rotateY 也要反号。
         // 右侧使用正角度，让右边缘朝镜头抬起；左侧保持镜像。
@@ -173,7 +211,7 @@ class _CoverFlowItem extends StatelessWidget {
         // 中心弹出 (-50)，侧面后退 (+40)，更远处的继续后退 (+40)
         final translateZ = reduceMotion
             ? 0.0
-            : -50.0 + sideProgress * 90.0 + extraDistance * 40.0;
+            : (-50.0 + sideProgress * 90.0 + extraDistance * 40.0) * cardScale;
 
         // 4. 缩放比例
         final scale = 1.15 - sideProgress * 0.25;
@@ -199,57 +237,69 @@ class _CoverFlowItem extends StatelessWidget {
           opacity: opacity,
           child: Transform(
             transform: matrix,
-            // 【核心修复 2】：旋转轴心固定在 140x140 实体封面的几何中心
+            // 【核心修复 2】：旋转轴心固定在实体封面的几何中心
             // 完整倒影通过溢出绘制，不参与变换组件的布局尺寸
             alignment: Alignment.center,
             child: SizedBox(
-              width: 140,
-              height: 140,
+              width: cardSize,
+              height: cardSize,
               child: Stack(
                 clipBehavior: Clip.none,
                 children: [
                   // --- 下半部：玻璃倒影 ---
-                  Positioned(
-                    left: -2,
-                    top: 142,
-                    child: SizedBox(
-                      width: 144,
-                      height: 144,
-                      child: ShaderMask(
-                        blendMode: BlendMode.dstIn,
-                        shaderCallback: (bounds) {
-                          return const LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Color(0x66FFFFFF),
-                              Color(0x66FFFFFF),
-                              Color(0x00FFFFFF),
-                              Color(0x00FFFFFF),
-                            ],
-                            stops: [0, .014, .403, 1],
-                          ).createShader(bounds);
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.all(2),
-                          child: Transform.flip(
-                            flipY: true,
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(
-                                AppRadii.artwork,
-                              ),
-                              clipBehavior: Clip.hardEdge,
-                              child: Transform.scale(
-                                scale: 1.015,
-                                filterQuality: FilterQuality.high,
-                                child: ArtworkImage(
-                                  imageUrl: album.imageUrl,
-                                  backgroundColor: Colors.transparent,
-                                  color: brightnessColor,
-                                  colorBlendMode: BlendMode.modulate,
-                                  cacheWidth: 144,
-                                  cacheHeight: 144,
-                                  fadeIn: false,
+                  if (reflectionHeight > 0)
+                    Positioned(
+                      left: -2,
+                      top: cardSize + 2,
+                      child: SizedBox(
+                        width: cardSize + 4,
+                        height: reflectionHeight,
+                        child: ClipRect(
+                          child: OverflowBox(
+                            alignment: Alignment.topCenter,
+                            maxHeight: cardSize + 4,
+                            child: SizedBox(
+                              width: cardSize + 4,
+                              height: cardSize + 4,
+                              child: ShaderMask(
+                                blendMode: BlendMode.dstIn,
+                                shaderCallback: (bounds) {
+                                  return const LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [
+                                      Color(0x66FFFFFF),
+                                      Color(0x66FFFFFF),
+                                      Color(0x00FFFFFF),
+                                      Color(0x00FFFFFF),
+                                    ],
+                                    stops: [0, .014, .403, 1],
+                                  ).createShader(bounds);
+                                },
+                                child: Padding(
+                                  padding: const EdgeInsets.all(2),
+                                  child: Transform.flip(
+                                    flipY: true,
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(
+                                        AppRadii.artwork,
+                                      ),
+                                      clipBehavior: Clip.hardEdge,
+                                      child: Transform.scale(
+                                        scale: 1.015,
+                                        filterQuality: FilterQuality.high,
+                                        child: ArtworkImage(
+                                          imageUrl: album.imageUrl,
+                                          backgroundColor: Colors.transparent,
+                                          color: brightnessColor,
+                                          colorBlendMode: BlendMode.modulate,
+                                          cacheWidth: decodeSize.toDouble(),
+                                          cacheHeight: decodeSize.toDouble(),
+                                          fadeIn: false,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
@@ -257,18 +307,17 @@ class _CoverFlowItem extends StatelessWidget {
                         ),
                       ),
                     ),
-                  ),
                   // --- 上半部：实体卡片 ---
                   Container(
-                    width: 140,
-                    height: 140,
+                    width: cardSize,
+                    height: cardSize,
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(AppRadii.artwork),
-                      boxShadow: const [
+                      boxShadow: [
                         BoxShadow(
-                          color: Color(0x99000000),
-                          blurRadius: 30,
-                          offset: Offset(0, 15),
+                          color: const Color(0x99000000),
+                          blurRadius: 30 * cardScale,
+                          offset: Offset(0, 15 * cardScale),
                         ),
                       ],
                     ),
@@ -283,8 +332,8 @@ class _CoverFlowItem extends StatelessWidget {
                           backgroundColor: Colors.transparent,
                           color: brightnessColor,
                           colorBlendMode: BlendMode.modulate,
-                          cacheWidth: 144,
-                          cacheHeight: 144,
+                          cacheWidth: decodeSize.toDouble(),
+                          cacheHeight: decodeSize.toDouble(),
                           fadeIn: false,
                         ),
                       ),

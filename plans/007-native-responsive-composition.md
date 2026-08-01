@@ -1,7 +1,7 @@
 # 007 — Create Native Portrait and Landscape Compositions
 
-- **Status**: TODO
-- **Commit**: 60c800d
+- **Status**: IMPLEMENTED
+- **Commit**: pending
 - **Severity**: HIGH
 - **Category**: Responsive composition; Accessibility; Performance
 - **Estimated scope**: 5 source files, medium layout refactor
@@ -60,3 +60,15 @@ Cover Flow must derive stage height, card size, reflection length, and side tran
 - **Cover Flow**: reflection ends before metadata and cards remain centered at all tested heights.
 - **Accessibility**: primary buttons retain at least 48×48 semantic bounds after any visual scaling.
 - **Done when**: native portrait and landscape are deliberate compositions, not the same portrait layout squeezed into a different aspect ratio.
+
+## Execution result
+
+- `lib/core/utils/shell_layout_metrics.dart` resolves four modes from the viewport: compact portrait (`height < 700 || width < 360`, rail 136, wheel ≤ 244), standard portrait (rail 158, wheel ≤ 300), wide portrait (`shortestSide >= 600`, rail 190, wheel ≤ 340, chassis bounded to 720×1100), and landscape (rail 150, wheel ≤ 260, chassis height bounded to 620).
+- The shell composition switches axis through a single `Flex` whose `direction` follows `metrics.isLandscape`, instead of duplicating the whole screen-module tree into a separate `Row`. Same result, far smaller diff, and `ChassisInsets`/cutout handling stays untouched.
+- Landscape now also applies the left/right safe-area padding the vertical stack never needed, and centres the wheel instead of lowering it.
+- `ClickWheel` accepts a `diameter`. The wheel stays authored at 300 and is scaled uniformly through `FittedBox`, so `_center`, `_ringHitMin`, the cardinal geometry, and hit testing all keep working in the authored space. The call site now derives the diameter from the wheel band with `wheelDiameterFor`, replacing the fixed `300 × 0.9`.
+- `HomePanel` takes a `railWidth`, clamps it to 132–190, and additionally caps it at 56% of the available width so the preview never collapses on a narrow glass.
+- `CoverFlowPanel` no longer uses the fixed 160/235 stage or 140px card. The stage is an `Expanded` region, the card is `min(stageHeight × .58, stageWidth × .42)` clamped to 72–168, and all 3D constants (105/25 translation, ±Z depth, 30px shadow) scale with the card. The reflection is clipped to a stage-relative floor plane, so it can no longer reach the metadata on a short viewport. Metadata width is `min(288, maxWidth - 24)`.
+- Deviations, deliberate: the composition uses `Flex` rather than two separate trees, and tablet bounding is a `Center` + `ConstrainedBox` around the chassis content while the backdrop stays full-bleed, preserving the existing "chassis fills the device" behavior.
+- `flutter analyze`: `No issues found!`. `flutter test`: 57 tests passing, including layout coverage at 320×568, 360×800, 390×844, 430×932, 844×390, 1.3× text scale, landscape/portrait wheel placement, short-stage Cover Flow, and card scaling.
+- Physical-device checks still pending: landscape feel on a phone, tablet composition, and confirming the scaled wheel's semantic bounds with TalkBack.
