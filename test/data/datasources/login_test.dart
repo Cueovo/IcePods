@@ -144,6 +144,22 @@ void main() {
     expect(store.value?.musicKey, 'original-key');
   });
 
+  test('credential key prefix overrides a stale login type field', () {
+    const qqCredential = QqMusicCredential(
+      musicId: '10001',
+      musicKey: 'Q_H_qq_key',
+      loginType: 1,
+    );
+    const wxCredential = QqMusicCredential(
+      musicId: '10001',
+      musicKey: 'W_X_wx_key',
+      loginType: 2,
+    );
+
+    expect(qqCredential.effectiveLoginType, 2);
+    expect(wxCredential.effectiveLoginType, 1);
+  });
+
   test('the production credential refresh interval is 24 hours', () {
     final client = QqMusicDirectClient();
     final login = QqMusicLoginModule(client: client);

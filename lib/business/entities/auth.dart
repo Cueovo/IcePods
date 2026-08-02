@@ -50,8 +50,15 @@ class QqMusicCredential {
   final int keyExpiresIn;
 
   bool get isValid => musicId.isNotEmpty && musicKey.isNotEmpty;
-  int get effectiveLoginType =>
-      loginType != 0 ? loginType : (musicKey.startsWith('W_X') ? 1 : 2);
+  int get effectiveLoginType {
+    if (musicKey.startsWith('W_X')) {
+      return 1;
+    }
+    if (musicKey.isNotEmpty) {
+      return 2;
+    }
+    return loginType;
+  }
 
   QqMusicCredential merge(QqMusicCredential fallback) {
     return QqMusicCredential(
