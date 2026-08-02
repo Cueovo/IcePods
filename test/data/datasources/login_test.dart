@@ -204,7 +204,7 @@ class _RefreshPlatformClient extends QqMusicDirectClient {
   }) async {
     this.platform = platform;
     this.comm = comm;
-    this.capturedRequest = requests.single;
+    capturedRequest = requests.single;
     this.overrideComm = overrideComm;
     return [
       {
