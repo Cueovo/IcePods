@@ -163,33 +163,42 @@ class QqMusicLoginModule {
     QqMusicCredential? target,
   ) async {
     final active = _requireCredential(target);
-    final params = <String, Object?>{
-      'openid': active.openId,
-      'access_token': active.accessToken,
-      'refresh_token': active.refreshToken,
-      'expired_in': active.expiredAt,
-      'str_musicid': active.stringMusicId.isEmpty
-          ? active.musicId
-          : active.stringMusicId,
-      'musicid': int.tryParse(active.musicId) ?? 0,
-      'musickey': active.musicKey,
-      'unionid': active.unionId,
-      'refresh_key': active.refreshKey,
-      'loginMode': 2,
-    };
-    if (active.effectiveLoginType == 1) {
+    late final QqMusicCgiRequest request;
+    if (active.effectiveLoginType == 2) {
+      request = const QqMusicCgiRequest(
+        module: 'QQConnectLogin.LoginServer',
+        method: 'QQLogin',
+        param: {'expired_in': 7776000},
+      ).withParameters({
+        'musicid': int.tryParse(active.musicId) ?? 0,
+        'musickey': active.musicKey,
+      });
+    } else {
+      final params = <String, Object?>{
+        'openid': active.openId,
+        'access_token': active.accessToken,
+        'refresh_token': active.refreshToken,
+        'expired_in': active.expiredAt,
+        'str_musicid': active.stringMusicId.isEmpty
+            ? active.musicId
+            : active.stringMusicId,
+        'musicid': int.tryParse(active.musicId) ?? 0,
+        'musickey': active.musicKey,
+        'unionid': active.unionId,
+        'refresh_key': active.refreshKey,
+        'loginMode': 2,
+      };
       params.remove('access_token');
       params.remove('expired_in');
       params.remove('musicid');
-    } else if (active.effectiveLoginType == 2) {
-      params.remove('str_musicid');
-      params.remove('unionid');
-    }
-    final data = await _loginRequest(
-      const QqMusicCgiRequest(
+      request = QqMusicCgiRequest(
         module: 'music.login.LoginServer',
         method: 'Login',
-      ).withParameters(params),
+        param: params,
+      );
+    }
+    final data = await _loginRequest(
+      request,
       credential: active,
       platform: QqMusicRequestPlatform.android,
     );

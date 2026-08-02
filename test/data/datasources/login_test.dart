@@ -74,6 +74,14 @@ void main() {
 
     expect(client.platform, QqMusicRequestPlatform.android);
     expect(client.comm, isEmpty);
+    expect(client.capturedRequest?.module, 'QQConnectLogin.LoginServer');
+    expect(client.capturedRequest?.method, 'QQLogin');
+    expect(client.capturedRequest?.param, {
+      'expired_in': 7776000,
+      'musicid': 10001,
+      'musickey': 'Q_H_old_key',
+    });
+    expect(client.overrideComm, isFalse);
   });
 
   test('an overdue persisted key refreshes during session restore', () async {
@@ -181,6 +189,8 @@ QqMusicCredential _credential(String key) => QqMusicCredential(
 class _RefreshPlatformClient extends QqMusicDirectClient {
   QqMusicRequestPlatform? platform;
   Map<String, Object?>? comm;
+  QqMusicCgiRequest? capturedRequest;
+  bool? overrideComm;
 
   @override
   Future<List<Map<String, dynamic>>> requestBatch(
@@ -194,6 +204,8 @@ class _RefreshPlatformClient extends QqMusicDirectClient {
   }) async {
     this.platform = platform;
     this.comm = comm;
+    this.capturedRequest = requests.single;
+    this.overrideComm = overrideComm;
     return [
       {
         'code': 0,
