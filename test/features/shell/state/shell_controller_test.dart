@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:qqmusic_ipod/business/entities/auth.dart';
 import 'package:qqmusic_ipod/business/entities/music.dart';
 import 'package:qqmusic_ipod/business/repositories/music_repository.dart';
+import 'package:qqmusic_ipod/core/storage/chassis_color_store.dart';
 import 'package:qqmusic_ipod/features/shell/models/ipod_models.dart';
 import 'package:qqmusic_ipod/features/shell/state/shell_controller.dart';
 
@@ -33,6 +34,13 @@ Future<ShellController> _pumpShell(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets('fresh installs use the classic silver chassis', (tester) async {
+    final shell = await _pumpShell(tester);
+
+    expect(ChassisColorStore.defaultColor, const Color(0xFFC8C8C8));
+    expect(shell.chassisColor, ChassisColorStore.defaultColor);
+  });
+
   testWidgets('non-adjacent modes cut instead of scrolling through pages', (
     tester,
   ) async {
@@ -93,6 +101,26 @@ void main() {
     expect(shell.mode, PlayerMode.player);
   });
 
+  testWidgets('queue returns to the radar feature that opened it', (
+    tester,
+  ) async {
+    final shell = await _pumpShell(tester);
+
+    final toFeature = shell.switchMode(PlayerMode.feature);
+    await tester.pumpAndSettle();
+    await toFeature;
+
+    shell.openQueue();
+    await tester.pumpAndSettle();
+    expect(shell.mode, PlayerMode.queue);
+
+    shell.handleMenu();
+    await tester.pumpAndSettle();
+
+    expect(shell.mode, PlayerMode.feature);
+    expect(shell.pageController.page, closeTo(3, 0.001));
+  });
+
   testWidgets('a superseded destination retargets without ghost pages', (
     tester,
   ) async {
@@ -137,6 +165,9 @@ class _FakeApi implements QqMusicApi {
 
   @override
   Future<void> restoreSession() async {}
+
+  @override
+  Future<void> ensureSessionFresh() async {}
 
   @override
   Future<QqMusicFeatureResult> loadFeature(

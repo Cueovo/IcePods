@@ -49,11 +49,12 @@ class AccountView extends StatelessWidget {
 
   Widget _accountBody() {
     if (controller.error.isNotEmpty) {
+      final loggedIn = controller.isLoggedIn;
       return FeatureMessageState(
         icon: Icons.error_outline_rounded,
         title: controller.error,
-        actionLabel: '重新获取二维码',
-        onAction: controller.startQrLogin,
+        actionLabel: loggedIn ? '重试登录续期' : '重新获取二维码',
+        onAction: loggedIn ? controller.refresh : controller.startQrLogin,
       );
     }
     final profile = controller.profile;

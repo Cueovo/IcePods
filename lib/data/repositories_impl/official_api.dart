@@ -58,6 +58,11 @@ class QqMusicOfficialApi implements QqMusicApi {
   }
 
   @override
+  Future<void> ensureSessionFresh() {
+    return _runDirect(_login.ensureFreshCredential);
+  }
+
+  @override
   Future<QqMusicCredential> refreshCredential() {
     return _runDirect(() => _login.refreshCredential(credential));
   }

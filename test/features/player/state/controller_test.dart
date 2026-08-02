@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:qqmusic_ipod/business/entities/music.dart';
 import 'package:qqmusic_ipod/business/entities/account.dart';
+import 'package:qqmusic_ipod/business/entities/auth.dart';
 import 'package:qqmusic_ipod/business/repositories/music_repository.dart';
 import 'package:qqmusic_ipod/features/player/state/controller.dart';
 import 'package:qqmusic_ipod/features/shell/models/ipod_models.dart';
@@ -136,6 +137,62 @@ void main() {
     expect(controller.playbackError, '该歌曲需要 VIP 会员才能播放');
   });
 
+  test('account refresh renews credentials before reloading profile', () async {
+    SharedPreferences.setMockInitialValues({});
+    final api = _RadarApi(loggedIn: true);
+    final player = AudioPlayer();
+    final controller = _controller(api: api, player: player);
+    addTearDown(() async {
+      controller.dispose();
+      await player.dispose();
+    });
+
+    await controller.openFeature(_accountEntry);
+    api.calls.clear();
+    await controller.refresh();
+
+    expect(api.calls, ['refreshCredential', 'getUserProfile']);
+    expect(controller.error, isEmpty);
+  });
+
+  test('account refresh does not reload profile after renewal fails', () async {
+    SharedPreferences.setMockInitialValues({});
+    final api = _RadarApi(loggedIn: true, refreshError: Exception('续期失败'));
+    final player = AudioPlayer();
+    final controller = _controller(api: api, player: player);
+    addTearDown(() async {
+      controller.dispose();
+      await player.dispose();
+    });
+
+    await controller.openFeature(_accountEntry);
+    api.calls.clear();
+    await controller.refresh();
+
+    expect(api.calls, ['refreshCredential']);
+    expect(controller.error, '续期失败');
+    expect(controller.isLoading, isFalse);
+  });
+
+  test('resume refresh exposes an invalidated session', () async {
+    SharedPreferences.setMockInitialValues({});
+    final api = _RadarApi(loggedIn: true, resumeError: Exception('登录已失效'));
+    final player = AudioPlayer();
+    final controller = _controller(api: api, player: player);
+    addTearDown(() async {
+      controller.dispose();
+      await player.dispose();
+    });
+
+    controller.onAppResumed();
+    while (controller.error.isEmpty) {
+      await Future<void>.delayed(Duration.zero);
+    }
+
+    expect(controller.isLoggedIn, isFalse);
+    expect(controller.error, '登录已失效');
+  });
+
   test('resolves radar liked state before choosing add or remove', () async {
     SharedPreferences.setMockInitialValues({});
     final api = _RadarApi(loggedIn: true, radarSongLiked: true);
@@ -206,10 +263,18 @@ QqMusicItem _song(String id) {
 }
 
 class _RadarApi implements QqMusicApi {
-  _RadarApi({this.loggedIn = false, this.radarSongLiked = false});
+  _RadarApi({
+    this.loggedIn = false,
+    this.radarSongLiked = false,
+    this.refreshError,
+    this.resumeError,
+  });
 
-  final bool loggedIn;
+  bool loggedIn;
   final bool radarSongLiked;
+  final Object? refreshError;
+  final Object? resumeError;
+  final List<String> calls = [];
   final Completer<void> _secondPageGate = Completer<void>();
   bool secondPageRequested = false;
   bool? lastSongLikedValue;
@@ -224,7 +289,30 @@ class _RadarApi implements QqMusicApi {
   }
 
   @override
+  Future<void> ensureSessionFresh() async {
+    final error = resumeError;
+    if (error != null) {
+      loggedIn = false;
+      throw error;
+    }
+  }
+
+  @override
+  Future<QqMusicCredential> refreshCredential() async {
+    calls.add('refreshCredential');
+    final error = refreshError;
+    if (error != null) {
+      throw error;
+    }
+    return const QqMusicCredential(
+      musicId: 'user-1',
+      musicKey: 'refreshed-key',
+    );
+  }
+
+  @override
   Future<QqMusicUserProfile> getUserProfile() async {
+    calls.add('getUserProfile');
     return const QqMusicUserProfile(
       id: 'user-1',
       nickname: 'Test User',

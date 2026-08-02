@@ -740,7 +740,7 @@ class QqMusicController extends ChangeNotifier {
     }
     if (active.feature == QqMusicFeature.account) {
       if (api.isLoggedIn) {
-        await _loadProfile();
+        await _refreshAccount();
       } else {
         await startQrLogin();
       }
@@ -2224,8 +2224,28 @@ class QqMusicController extends ChangeNotifier {
     }
   }
 
+  Future<void> _refreshSessionOnResume() async {
+    try {
+      await api.ensureSessionFresh();
+    } catch (error) {
+      if (api.isLoggedIn) {
+        return;
+      }
+      _clearAuthenticatedState();
+      if (_entry?.feature == QqMusicFeature.account) {
+        await startQrLogin();
+      } else {
+        _error = _message(error);
+        notifyListeners();
+      }
+    }
+  }
+
   /// Call when the app returns to foreground so QR login can finish after scan.
   void onAppResumed() {
+    if (api.isLoggedIn) {
+      unawaited(_refreshSessionOnResume());
+    }
     final activeQr = _qrCode;
     if (activeQr == null || api.isLoggedIn) {
       return;
@@ -2265,6 +2285,14 @@ class QqMusicController extends ChangeNotifier {
   Future<void> logout() async {
     _stopQrPolling();
     await api.logout();
+    _clearAuthenticatedState();
+    _qrCode = null;
+    _qrStatus = null;
+    notifyListeners();
+    await startQrLogin();
+  }
+
+  void _clearAuthenticatedState() {
     _featureCache.clear();
     _featurePages.clear();
     _childrenPages.clear();
@@ -2276,10 +2304,21 @@ class QqMusicController extends ChangeNotifier {
     _currentSongFromLiked = false;
     _unavailableSongKeys.clear();
     _profile = null;
-    _qrCode = null;
-    _qrStatus = null;
+  }
+
+  Future<void> _refreshAccount() async {
+    _isLoading = true;
+    _error = '';
     notifyListeners();
-    await startQrLogin();
+    try {
+      await api.refreshCredential();
+      await _updateProfile();
+    } catch (error) {
+      _error = _message(error);
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   Future<void> _loadProfile() async {
@@ -2287,24 +2326,28 @@ class QqMusicController extends ChangeNotifier {
     _error = '';
     notifyListeners();
     try {
-      final loaded = await api.getUserProfile();
-      final previousVip = _profile?.isVip;
-      _profile = loaded.isVip == null && previousVip == true
-          ? QqMusicUserProfile(
-              id: loaded.id,
-              nickname: loaded.nickname,
-              avatarUrl: loaded.avatarUrl,
-              isVip: true,
-            )
-          : loaded;
-      if (_profile?.isVip == true && previousVip != true) {
-        _unavailableSongKeys.clear();
-      }
+      await _updateProfile();
     } catch (error) {
       _error = _message(error);
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  Future<void> _updateProfile() async {
+    final loaded = await api.getUserProfile();
+    final previousVip = _profile?.isVip;
+    _profile = loaded.isVip == null && previousVip == true
+        ? QqMusicUserProfile(
+            id: loaded.id,
+            nickname: loaded.nickname,
+            avatarUrl: loaded.avatarUrl,
+            isVip: true,
+          )
+        : loaded;
+    if (_profile?.isVip == true && previousVip != true) {
+      _unavailableSongKeys.clear();
     }
   }
 

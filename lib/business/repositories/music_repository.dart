@@ -13,6 +13,8 @@ abstract interface class QqMusicApi {
 
   Future<QqMusicQrStatus> checkQrStatus(QqMusicQrCode qrCode);
 
+  Future<void> ensureSessionFresh();
+
   Future<QqMusicCredential> refreshCredential();
 
   Future<void> logout();

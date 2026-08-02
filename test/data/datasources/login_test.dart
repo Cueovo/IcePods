@@ -6,6 +6,7 @@ import 'package:qqmusic_ipod/business/entities/auth.dart';
 import 'package:qqmusic_ipod/core/storage/credential_store.dart';
 import 'package:qqmusic_ipod/data/datasources/direct_client.dart';
 import 'package:qqmusic_ipod/data/datasources/login.dart';
+import 'package:qqmusic_ipod/data/models/request.dart';
 
 void main() {
   test('credentials refresh proactively on the configured interval', () async {
@@ -24,6 +25,29 @@ void main() {
 
     expect(login.refreshCount, 1);
     expect(login.credential?.musicKey, 'refreshed-key');
+  });
+
+  test('concurrent credential refreshes share one request', () async {
+    final client = _GatedRefreshClient();
+    final login = QqMusicLoginModule(
+      client: client,
+      credentialStore: _MemoryCredentialStore(null),
+    );
+    addTearDown(() {
+      login.close();
+      client.close();
+    });
+
+    login.useCredential(_credential('initial-key'));
+    final first = login.refreshCredential();
+    final second = login.refreshCredential();
+
+    expect(client.refreshRequestCount, 1);
+    client.release();
+
+    final results = await Future.wait([first, second]);
+    expect(results[0].musicKey, 'refreshed-key');
+    expect(results[1].musicKey, 'refreshed-key');
   });
 
   test('an overdue persisted key refreshes during session restore', () async {
@@ -54,6 +78,28 @@ void main() {
     expect(login.credential?.musicKey, 'refreshed-key');
   });
 
+  test('refresh preserves legacy fields omitted by the server', () {
+    final original = QqMusicCredential(
+      musicId: '10001',
+      musicKey: 'old-key',
+      refreshToken: 'refresh-token',
+      refreshKey: 'refresh-key',
+      loginType: 2,
+      musicKeyCreatedAt: 123,
+      keyExpiresIn: 86400,
+    );
+    const response = QqMusicCredential(musicId: '10001', musicKey: 'new-key');
+
+    final merged = response.merge(original);
+
+    expect(merged.musicKey, 'new-key');
+    expect(merged.refreshToken, 'refresh-token');
+    expect(merged.refreshKey, 'refresh-key');
+    expect(merged.loginType, 2);
+    expect(merged.musicKeyCreatedAt, 123);
+    expect(merged.keyExpiresIn, 86400);
+  });
+
   test('the production credential refresh interval is 24 hours', () {
     final client = QqMusicDirectClient();
     final login = QqMusicLoginModule(client: client);
@@ -71,6 +117,33 @@ QqMusicCredential _credential(String key) => QqMusicCredential(
   musicKey: key,
   refreshToken: 'refresh-token',
 );
+
+class _GatedRefreshClient extends QqMusicDirectClient {
+  final Completer<void> _gate = Completer<void>();
+  int refreshRequestCount = 0;
+
+  void release() => _gate.complete();
+
+  @override
+  Future<List<Map<String, dynamic>>> requestBatch(
+    List<QqMusicCgiRequest> requests, {
+    QqMusicCredential? credential,
+    Map<String, Object?> comm = const {},
+    bool overrideComm = false,
+    bool sign = false,
+    QqMusicRequestPlatform platform = QqMusicRequestPlatform.web,
+    Set<int> allowedErrorCodes = const {},
+  }) async {
+    refreshRequestCount += 1;
+    await _gate.future;
+    return [
+      {
+        'code': 0,
+        'data': {'musicid': credential!.musicId, 'musickey': 'refreshed-key'},
+      },
+    ];
+  }
+}
 
 class _RestoringLogin extends QqMusicLoginModule {
   _RestoringLogin(

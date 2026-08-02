@@ -53,6 +53,9 @@ class _FakeApi implements QqMusicApi {
   Future<void> restoreSession() async {}
 
   @override
+  Future<void> ensureSessionFresh() async {}
+
+  @override
   Future<QqMusicFeatureResult> loadFeature(
     QqMusicFeature feature, {
     int page = 1,

@@ -6,7 +6,7 @@ class ChassisColorStore {
   ChassisColorStore({this._preferences});
 
   static const _key = 'ipod.chassis_color';
-  static const defaultColor = Color(0xFF000000);
+  static const defaultColor = Color(0xFFC8C8C8);
 
   SharedPreferences? _preferences;
 

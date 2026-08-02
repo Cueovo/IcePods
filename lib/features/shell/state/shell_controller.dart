@@ -137,6 +137,7 @@ class ShellController extends ChangeNotifier {
   }
 
   int queueIndex = 0;
+  PlayerMode _queueReturnMode = PlayerMode.player;
 
   int get pageIndex => _pageIndexFor(mode);
 
@@ -419,6 +420,7 @@ class ShellController extends ChangeNotifier {
     if (mode == PlayerMode.queue) {
       return;
     }
+    _queueReturnMode = mode;
     final queue = music.playbackQueue;
     final currentIndex = music.currentPlaybackQueueIndex;
     queueIndex = currentIndex >= 0
@@ -475,7 +477,7 @@ class ShellController extends ChangeNotifier {
       return;
     }
     if (mode == PlayerMode.queue) {
-      unawaited(switchMode(PlayerMode.player));
+      unawaited(switchMode(_queueReturnMode));
       return;
     }
     if (mode == PlayerMode.menu && menuPath.length > 1) {

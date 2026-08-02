@@ -53,6 +53,7 @@ class QqMusicLoginModule {
   final Random _random;
 
   QqMusicCredential? _credential;
+  Future<QqMusicCredential>? _credentialRefreshInFlight;
   Timer? _credentialRefreshTimer;
   bool _scheduledRefreshRunning = false;
   bool _closed = false;
@@ -93,6 +94,27 @@ class QqMusicLoginModule {
     }
   }
 
+  Future<void> ensureFreshCredential() async {
+    final active = _credential;
+    if (_closed || active == null || !active.isValid) {
+      return;
+    }
+    try {
+      if (_credentialRefreshDelay(active) == Duration.zero ||
+          await checkExpired(active)) {
+        await refreshCredential(active);
+      } else {
+        _scheduleCredentialRefresh();
+      }
+    } on QqMusicDirectException catch (error) {
+      if (!error.isUnauthorized) {
+        rethrow;
+      }
+      await logout();
+      rethrow;
+    }
+  }
+
   Future<QqMusicQrCode> createQrCode({String loginType = 'qq'}) async {
     final normalized = loginType.trim().toLowerCase();
     switch (normalized) {
@@ -120,9 +142,23 @@ class QqMusicLoginModule {
     }
   }
 
-  Future<QqMusicCredential> refreshCredential([
+  Future<QqMusicCredential> refreshCredential([QqMusicCredential? target]) {
+    final pending = _credentialRefreshInFlight;
+    if (pending != null) {
+      return pending;
+    }
+    final refresh = _refreshCredential(target);
+    _credentialRefreshInFlight = refresh;
+    return refresh.whenComplete(() {
+      if (identical(_credentialRefreshInFlight, refresh)) {
+        _credentialRefreshInFlight = null;
+      }
+    });
+  }
+
+  Future<QqMusicCredential> _refreshCredential(
     QqMusicCredential? target,
-  ]) async {
+  ) async {
     final active = _requireCredential(target);
     final params = <String, Object?>{
       'openid': active.openId,
@@ -154,7 +190,7 @@ class QqMusicLoginModule {
       credential: active,
       comm: {'tmeLoginType': active.effectiveLoginType},
     );
-    final refreshed = QqMusicCredential.fromJson(data);
+    final refreshed = QqMusicCredential.fromJson(data).merge(active);
     if (!refreshed.isValid) {
       throw const QqMusicDirectException('刷新登录凭据失败');
     }

@@ -190,7 +190,7 @@ class ProfileCard extends StatelessWidget {
                                         Expanded(
                                           child: _AccountActionButton(
                                             icon: Icons.refresh_rounded,
-                                            label: '刷新资料',
+                                            label: '续期登录',
                                             loading: isRefreshing,
                                             onTap: onRefresh,
                                           ),

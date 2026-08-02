@@ -53,6 +53,28 @@ class QqMusicCredential {
   int get effectiveLoginType =>
       loginType != 0 ? loginType : (musicKey.startsWith('W_X') ? 1 : 2);
 
+  QqMusicCredential merge(QqMusicCredential fallback) {
+    return QqMusicCredential(
+      musicId: musicId.isEmpty ? fallback.musicId : musicId,
+      musicKey: musicKey.isEmpty ? fallback.musicKey : musicKey,
+      openId: openId.isEmpty ? fallback.openId : openId,
+      refreshToken: refreshToken.isEmpty ? fallback.refreshToken : refreshToken,
+      accessToken: accessToken.isEmpty ? fallback.accessToken : accessToken,
+      expiredAt: expiredAt == 0 ? fallback.expiredAt : expiredAt,
+      unionId: unionId.isEmpty ? fallback.unionId : unionId,
+      stringMusicId: stringMusicId.isEmpty
+          ? fallback.stringMusicId
+          : stringMusicId,
+      refreshKey: refreshKey.isEmpty ? fallback.refreshKey : refreshKey,
+      encryptUin: encryptUin.isEmpty ? fallback.encryptUin : encryptUin,
+      loginType: loginType == 0 ? fallback.loginType : loginType,
+      musicKeyCreatedAt: musicKeyCreatedAt == 0
+          ? fallback.musicKeyCreatedAt
+          : musicKeyCreatedAt,
+      keyExpiresIn: keyExpiresIn == 0 ? fallback.keyExpiresIn : keyExpiresIn,
+    );
+  }
+
   Map<String, String> toStorage() {
     return {
       'musicid': musicId,
