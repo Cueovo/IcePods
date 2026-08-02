@@ -78,6 +78,8 @@ class QqMusicDirectClient {
     return device.openUdid;
   }
 
+  Future<void> invalidateAndroidSession() => _androidContext.invalidateSession();
+
   /// 发送单个 CGI，并直接返回该 CGI 的 `data`。
   Future<Map<String, dynamic>> request(
     QqMusicCgiRequest request, {

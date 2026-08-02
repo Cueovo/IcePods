@@ -7,33 +7,37 @@ import 'package:qqmusic_ipod/data/datasources/playlist.dart';
 import 'package:qqmusic_ipod/data/models/request.dart';
 
 void main() {
-  test('playlist mutation uses the QQ authenticated web write payload', () async {
-    final client = _RecordingClient();
-    final module = QqMusicPlaylistModule(client);
-    const song = QqMusicItem(
-      id: '12345',
-      mid: 'radar-mid',
-      title: 'Radar song',
-      subtitle: 'Artist',
-      imageUrl: '',
-      type: QqMusicItemType.song,
-      songType: 111,
-    );
+  test(
+    'playlist mutation uses the authenticated Android write payload',
+    () async {
+      final client = _RecordingClient();
+      final module = QqMusicPlaylistModule(client);
+      const song = QqMusicItem(
+        id: '12345',
+        mid: 'radar-mid',
+        title: 'Radar song',
+        subtitle: 'Artist',
+        imageUrl: '',
+        type: QqMusicItemType.song,
+        songType: 111,
+      );
 
-    await module.mutateSongs(
-      '201',
-      const [song],
-      add: true,
-      credential: const QqMusicCredential(musicId: '1', musicKey: 'key'),
-    );
+      await module.mutateSongs(
+        '201',
+        const [song],
+        add: true,
+        credential: const QqMusicCredential(musicId: '1', musicKey: 'key'),
+      );
 
-    final info = client.lastRequest!.param['v_songInfo']! as List<Object?>;
-    expect(info.single, {'songId': 12345, 'songType': 0});
-    expect(client.lastPlatform, QqMusicRequestPlatform.web);
-    expect(client.lastComm, containsPair('ct', '11'));
-    expect(client.lastComm, containsPair('authst', 'key'));
-    expect(client.lastComm, containsPair('tmeLoginType', '2'));
-  });
+      final info = client.lastRequest!.param['v_songInfo']! as List<Object?>;
+      expect(info.single, {'songId': 12345, 'songType': 0});
+      expect(client.lastRequest!.param, containsPair('tid', 0));
+      expect(client.lastRequest!.param, containsPair('bFmtUtf8', true));
+      expect(client.lastRequest!.preserveBool, isTrue);
+      expect(client.lastPlatform, QqMusicRequestPlatform.android);
+      expect(client.lastComm, isEmpty);
+    },
+  );
 }
 
 class _RecordingClient extends QqMusicDirectClient {

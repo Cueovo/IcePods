@@ -50,6 +50,32 @@ void main() {
     expect(results[1].musicKey, 'refreshed-key');
   });
 
+  test('credential refresh uses the Android request platform', () async {
+    final client = _RefreshPlatformClient();
+    final login = QqMusicLoginModule(
+      client: client,
+      credentialStore: _MemoryCredentialStore(null),
+    );
+    addTearDown(() {
+      login.close();
+      client.close();
+    });
+
+    login.useCredential(
+      const QqMusicCredential(
+        musicId: '10001',
+        musicKey: 'Q_H_old_key',
+        accessToken: 'access-token',
+        refreshToken: 'refresh-token',
+        loginType: 2,
+      ),
+    );
+    await login.refreshCredential();
+
+    expect(client.platform, QqMusicRequestPlatform.android);
+    expect(client.comm, isEmpty);
+  });
+
   test('an overdue persisted key refreshes during session restore', () async {
     final now = DateTime.utc(2026, 7, 30, 12);
     final client = QqMusicDirectClient();
@@ -100,6 +126,24 @@ void main() {
     expect(merged.keyExpiresIn, 86400);
   });
 
+  test('restoreCredential replaces the active and persisted credential', () async {
+    final client = QqMusicDirectClient();
+    final store = _MemoryCredentialStore(_credential('fresh-key'));
+    final login = QqMusicLoginModule(
+      client: client,
+      credentialStore: store,
+    );
+    addTearDown(() {
+      login.close();
+      client.close();
+    });
+
+    await login.restoreCredential(_credential('original-key'));
+
+    expect(login.credential?.musicKey, 'original-key');
+    expect(store.value?.musicKey, 'original-key');
+  });
+
   test('the production credential refresh interval is 24 hours', () {
     final client = QqMusicDirectClient();
     final login = QqMusicLoginModule(client: client);
@@ -117,6 +161,35 @@ QqMusicCredential _credential(String key) => QqMusicCredential(
   musicKey: key,
   refreshToken: 'refresh-token',
 );
+
+class _RefreshPlatformClient extends QqMusicDirectClient {
+  QqMusicRequestPlatform? platform;
+  Map<String, Object?>? comm;
+
+  @override
+  Future<List<Map<String, dynamic>>> requestBatch(
+    List<QqMusicCgiRequest> requests, {
+    QqMusicCredential? credential,
+    Map<String, Object?> comm = const {},
+    bool overrideComm = false,
+    bool sign = false,
+    QqMusicRequestPlatform platform = QqMusicRequestPlatform.web,
+    Set<int> allowedErrorCodes = const {},
+  }) async {
+    this.platform = platform;
+    this.comm = comm;
+    return [
+      {
+        'code': 0,
+        'data': {
+          'musicid': credential!.musicId,
+          'musickey': 'Q_H_refreshed_key',
+          'loginType': 2,
+        },
+      },
+    ];
+  }
+}
 
 class _GatedRefreshClient extends QqMusicDirectClient {
   final Completer<void> _gate = Completer<void>();

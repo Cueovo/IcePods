@@ -49,33 +49,25 @@ class QqMusicPlaylistModule {
       throw StateError('没有可操作的歌曲');
     }
     // Match working DelSonglist clients (dirid=201 for 我喜欢):
-    // param = { dirId, v_songInfo: [{ songId, songType: 0 }] }
-    // No tid / bFmtUtf8; songType is fixed 0 for song rows.
+    // param = { dirId, tid, bFmtUtf8, v_songInfo: [{ songId, songType: 0 }] }
+    // bFmtUtf8 remains a bool; songType is fixed 0 for song rows.
     final data = await client.request(
       QqMusicCgiRequest(
         module: 'music.musicasset.PlaylistDetailWrite',
         method: add ? 'AddSonglist' : 'DelSonglist',
         param: {
           'dirId': int.tryParse(directoryId) ?? 0,
+          'tid': 0,
+          'bFmtUtf8': true,
           'v_songInfo': [
             for (final song in valid)
               {'songId': int.parse(song.id), 'songType': 0},
           ],
         },
+        preserveBool: true,
       ),
       credential: credential,
-      comm: {
-        'ct': '11',
-        'cv': 13020508,
-        'v': 13020508,
-        'tmeAppID': 'qqmusic',
-        'uid': credential.musicId,
-        'qq': credential.musicId,
-        'authst': credential.musicKey,
-        'tmeLoginType': '${credential.effectiveLoginType}',
-        'loginUin': credential.musicId,
-      },
-      platform: QqMusicRequestPlatform.web,
+      platform: QqMusicRequestPlatform.android,
     );
     _ensureSuccess(data, add ? '添加歌曲失败' : '移除歌曲失败');
   }

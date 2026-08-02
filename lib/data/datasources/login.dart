@@ -67,6 +67,9 @@ class QqMusicLoginModule {
     _scheduleCredentialRefresh();
   }
 
+  Future<void> restoreCredential(QqMusicCredential credential) =>
+      _saveCredential(credential);
+
   Future<void> restoreSession() async {
     final restored = await _credentialStore.read();
     if (restored == null) {
@@ -188,7 +191,7 @@ class QqMusicLoginModule {
         method: 'Login',
       ).withParameters(params),
       credential: active,
-      comm: {'tmeLoginType': active.effectiveLoginType},
+      platform: QqMusicRequestPlatform.android,
     );
     final refreshed = QqMusicCredential.fromJson(data).merge(active);
     if (!refreshed.isValid) {

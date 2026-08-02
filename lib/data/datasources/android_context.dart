@@ -1,3 +1,7 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
+
 import 'package:qqmusic_ipod/business/entities/auth.dart';
 import 'package:qqmusic_ipod/data/models/device.dart';
 import 'package:qqmusic_ipod/data/datasources/qimei.dart';
@@ -19,19 +23,21 @@ class QqMusicAndroidContext {
   QqMusicDevice? _device;
   Future<QqMusicDevice>? _initializing;
 
-  Future<QqMusicDevice> ensureDevice(QqMusicCredential? credential) {
+  Future<QqMusicDevice> ensureDevice(QqMusicCredential? credential) async {
+    final credentialHash = _credentialHash(credential);
     final nowSeconds = _clock();
     final cached = _device;
     if (cached != null &&
         cached.hasFreshQimei(nowSeconds) &&
-        cached.hasFreshSession(nowSeconds)) {
-      return Future.value(cached);
+        cached.hasFreshSession(nowSeconds, credentialHash)) {
+      return cached;
     }
     final pending = _initializing;
     if (pending != null) {
-      return pending;
+      await pending;
+      return ensureDevice(credential);
     }
-    final future = _ensureDevice(credential);
+    final future = _ensureDevice(credential, credentialHash);
     _initializing = future;
     return future.whenComplete(() {
       if (identical(_initializing, future)) {
@@ -40,7 +46,33 @@ class QqMusicAndroidContext {
     });
   }
 
-  Future<QqMusicDevice> _ensureDevice(QqMusicCredential? credential) async {
+  Future<void> invalidateSession() async {
+    final pending = _initializing;
+    if (pending != null) {
+      await pending;
+      return invalidateSession();
+    }
+    final future = _invalidateSession();
+    _initializing = future;
+    await future.whenComplete(() {
+      if (identical(_initializing, future)) {
+        _initializing = null;
+      }
+    });
+  }
+
+  Future<QqMusicDevice> _invalidateSession() async {
+    final device = _device ?? await store.read();
+    _device = device;
+    _clearSession(device);
+    await store.write(device);
+    return device;
+  }
+
+  Future<QqMusicDevice> _ensureDevice(
+    QqMusicCredential? credential,
+    String credentialHash,
+  ) async {
     final device = _device ?? await store.read();
     _device = device;
     final nowSeconds = _clock();
@@ -51,7 +83,8 @@ class QqMusicAndroidContext {
       device.qimeiSavedAt = nowSeconds;
       await store.write(device);
     }
-    if (!device.hasFreshSession(nowSeconds)) {
+    if (!device.hasFreshSession(nowSeconds, credentialHash)) {
+      _clearSession(device);
       final session = await sessionProvider.request(
         device: device,
         comm: buildComm(device, credential),
@@ -60,9 +93,27 @@ class QqMusicAndroidContext {
       device.sessionSid = session.sid;
       device.sessionVkey = session.vkey;
       device.sessionSavedAt = nowSeconds;
+      device.sessionCredentialHash = credentialHash;
       await store.write(device);
     }
     return device;
+  }
+
+  void _clearSession(QqMusicDevice device) {
+    device.sessionUid = '';
+    device.sessionSid = '';
+    device.sessionVkey = '';
+    device.sessionSavedAt = 0;
+    device.sessionCredentialHash = '';
+  }
+
+  String _credentialHash(QqMusicCredential? credential) {
+    final musicId = credential?.musicId ?? '';
+    final musicKey = credential?.musicKey ?? '';
+    if (musicId.isEmpty || musicKey.isEmpty) {
+      return '';
+    }
+    return sha256.convert(utf8.encode('$musicId\u0000$musicKey')).toString();
   }
 
   Map<String, Object?> buildComm(

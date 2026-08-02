@@ -16,6 +16,7 @@ class QqMusicDevice {
     this.sessionSid = '',
     this.sessionVkey = '',
     this.sessionSavedAt = 0,
+    this.sessionCredentialHash = '',
     this.product = 'iarim',
     this.device = 'sagit',
     this.board = 'eomam',
@@ -59,6 +60,7 @@ class QqMusicDevice {
       sessionSid: _string(json['session_sid']),
       sessionVkey: _string(json['session_vkey']),
       sessionSavedAt: _int(json['session_save_time']),
+      sessionCredentialHash: _string(json['session_credential_hash']),
       product: _string(json['product'], 'iarim'),
       device: _string(json['device'], 'sagit'),
       board: _string(json['board'], 'eomam'),
@@ -90,6 +92,7 @@ class QqMusicDevice {
   String sessionSid;
   String sessionVkey;
   int sessionSavedAt;
+  String sessionCredentialHash;
 
   bool get hasValidIdentity =>
       display.isNotEmpty &&
@@ -104,9 +107,10 @@ class QqMusicDevice {
       qimei36.isNotEmpty &&
       nowSeconds - qimeiSavedAt < const Duration(days: 1).inSeconds;
 
-  bool hasFreshSession(int nowSeconds) =>
+  bool hasFreshSession(int nowSeconds, String credentialHash) =>
       sessionUid.isNotEmpty &&
       sessionSid.isNotEmpty &&
+      sessionCredentialHash == credentialHash &&
       nowSeconds - sessionSavedAt < const Duration(days: 1).inSeconds;
 
   Map<String, dynamic> toJson() => {
@@ -129,6 +133,7 @@ class QqMusicDevice {
     'session_sid': sessionSid,
     'session_vkey': sessionVkey,
     'session_save_time': sessionSavedAt,
+    'session_credential_hash': sessionCredentialHash,
     'open_udid': openUdid,
   };
 }

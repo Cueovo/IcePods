@@ -456,6 +456,21 @@ class QqMusicOfficialApi implements QqMusicApi {
     required bool add,
   }) async {
     var active = _requireCredential();
+    final original = active;
+    try {
+      await _playlist.mutateSongs(
+        directoryId,
+        songs,
+        add: add,
+        credential: active,
+      );
+      return;
+    } on QqMusicDirectException catch (error) {
+      if (error.code != 80105) {
+        rethrow;
+      }
+    }
+    await _client.invalidateAndroidSession();
     try {
       await _playlist.mutateSongs(
         directoryId,
@@ -478,12 +493,16 @@ class QqMusicOfficialApi implements QqMusicApi {
         credential: active,
       );
     } on QqMusicDirectException catch (error) {
-      if (error.code == 80105 || error.isUnauthorized) {
-        throw const QqMusicApiException(
-          '登录凭据已失效，请退出后重新登录',
-          statusCode: 401,
-          code: 80105,
+      if (error.code == 80105) {
+        await _login.restoreCredential(original);
+        throw QqMusicApiException(
+          add ? '添加歌曲失败，请稍后重试' : '移除歌曲失败，请稍后重试',
+          code: error.code,
+          statusCode: error.statusCode,
         );
+      }
+      if (error.isUnauthorized) {
+        throw const QqMusicApiException('登录凭据已失效，请退出后重新登录', statusCode: 401);
       }
       rethrow;
     }
